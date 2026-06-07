@@ -6,7 +6,7 @@ import 'package:pigeon/pigeon.dart';
   kotlinOut:
       'android/src/main/kotlin/in/qoder/refresh_rate/generated/RefreshRateApi.kt',
   kotlinOptions: KotlinOptions(package: 'in.qoder.refresh_rate.generated'),
-  swiftOut: 'ios/Classes/generated/RefreshRateApi.swift',
+  swiftOut: 'ios/refresh_rate/Sources/refresh_rate/generated/RefreshRateApi.swift',
   swiftOptions: SwiftOptions(),
   cppHeaderOut: 'windows/refresh_rate_api.g.h',
   cppSourceOut: 'windows/refresh_rate_api.g.cpp',

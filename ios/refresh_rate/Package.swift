@@ -1,12 +1,6 @@
 // swift-tools-version: 5.9
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 //
-// This Package.swift file enables Swift Package Manager support for the
-// refresh_rate Flutter plugin on iOS. It mirrors the sources and platform
-// requirements declared in refresh_rate.podspec.
-//
-// See: https://docs.flutter.dev/to/spm
-
 import PackageDescription
 
 let package = Package(
@@ -17,19 +11,22 @@ let package = Package(
     products: [
         .library(name: "refresh-rate", targets: ["refresh_rate"]),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(name: "FlutterFramework", path: "../FlutterFramework"),
+    ],
     targets: [
         .target(
+            name: "refresh_rate_objc",
+            path: "Sources/refresh_rate_objc",
+            publicHeadersPath: "include"
+        ),
+        .target(
             name: "refresh_rate",
-            dependencies: [],
-            path: "Classes",
-            exclude: [],
-            sources: nil, // include all .swift, .m, .h sources
-            publicHeadersPath: ".",
-            swiftSettings: [
-                .unsafeFlags(["-import-objc-header", "Classes/DisplayLinkSwizzle.h"],
-                             .when(platforms: [.iOS])),
-            ]
+            dependencies: [
+                "refresh_rate_objc",
+                .product(name: "FlutterFramework", package: "FlutterFramework"),
+            ],
+            path: "Sources/refresh_rate"
         ),
     ]
 )

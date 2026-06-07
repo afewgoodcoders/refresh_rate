@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- Added Swift Package Manager support.
+
 ## 1.0.1
 
 ### Web support

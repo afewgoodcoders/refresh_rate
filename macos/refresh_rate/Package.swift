@@ -16,11 +16,15 @@ let package = Package(
     products: [
         .library(name: "refresh-rate", targets: ["refresh_rate"]),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(name: "FlutterFramework", path: "../FlutterFramework"),
+    ],
     targets: [
         .target(
             name: "refresh_rate",
-            dependencies: [],
+            dependencies: [
+                .product(name: "FlutterFramework", package: "FlutterFramework"),
+            ],
             path: "Classes",
             publicHeadersPath: ".",
             cSettings: [
