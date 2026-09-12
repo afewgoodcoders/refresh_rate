@@ -1,5 +1,4 @@
 import '../generated/refresh_rate_api.g.dart';
-import 'package:flutter/foundation.dart';
 import 'enums.dart';
 
 /// A snapshot of the current display configuration and device health.
@@ -7,25 +6,22 @@ import 'enums.dart';
 /// Retrieve a fresh snapshot via [RefreshRate.refresh] or listen to
 /// [RefreshRate.onChanged] for real-time updates.
 class DisplayInfo {
-  /// Legacy native reported Hz (web callback cadence); zero when unavailable.
+  /// The refresh rate the display is currently running at, in Hz.
   final double currentRate;
 
-  /// Maximum reported capability in Hz; zero when unavailable.
+  /// The maximum refresh rate supported by this display, in Hz.
   final double maxRate;
 
-  /// Minimum reported mode rate in Hz; zero when unavailable.
+  /// The minimum refresh rate supported by this display, in Hz.
   final double minRate;
 
-  /// Reported compatible mode rates, not an exhaustive physical panel range.
+  /// All refresh rates the display hardware can run at, in Hz.
   final List<double> supportedRates;
 
-  /// Legacy VRR evidence; false also covers unknown. Prefer the nullable field.
+  /// Whether the display supports variable refresh rate (VRR / LTPO).
   final bool isVariableRefreshRate;
 
-  /// Nullable capability evidence; legacy isVariableRefreshRate collapses unknown.
-  final bool? reportedVariableRefreshRate;
-
-  /// Legacy engine-rate field; zero when the backend has no qualified source.
+  /// The frame rate the Flutter engine is currently targeting, in Hz.
   final double engineTargetRate;
 
   /// Whether iOS ProMotion adaptive refresh is enabled for this app.
@@ -61,30 +57,6 @@ class DisplayInfo {
   /// `null` on mobile platforms.
   final int? monitorCount;
 
-  /// Time this native snapshot arrived in Dart (not hardware event time).
-  final DateTime? observedAt;
-
-  /// OS-reported display information; null when no qualified value exists.
-  double? get nativeReportedDisplayHz =>
-      displayServer == 'web' ? null : _valid(currentRate);
-
-  /// Observer callback cadence, never Flutter presentation FPS.
-  double? get nativeCallbackCadenceHz =>
-      displayServer == 'web' ? _valid(currentRate) : null;
-
-  /// Maximum reported capability for the relevant native display scope.
-  double? get displayModeMaxHz => _valid(maxRate);
-
-  /// Flutter display information; not an observed engine frame-rate cap.
-  double? get engineReportedDisplayHz => _valid(engineTargetRate);
-
-  /// Whether no snapshot exists or the last read is older than five seconds.
-  bool get isStale =>
-      observedAt == null ||
-      DateTime.now().difference(observedAt!) > const Duration(seconds: 5);
-  static double? _valid(double? value) =>
-      value != null && value.isFinite && value > 0 ? value : null;
-
   /// Creates a new [DisplayInfo] snapshot.
   const DisplayInfo({
     required this.currentRate,
@@ -100,24 +72,17 @@ class DisplayInfo {
     this.hasAdaptiveRefreshRate,
     this.displayServer,
     this.monitorCount,
-    this.observedAt,
-    this.reportedVariableRefreshRate,
   });
 
   /// Creates a [DisplayInfo] from a platform [DisplayInfoMessage].
   factory DisplayInfo.fromMessage(DisplayInfoMessage msg) {
     return DisplayInfo(
-      currentRate: _valid(msg.currentRate) ?? 0.0,
-      maxRate: _valid(msg.maxRate) ?? 0.0,
-      minRate: _valid(msg.minRate) ?? 0.0,
-      supportedRates: List.unmodifiable(msg.supportedRates
-              ?.whereType<double>()
-              .where((rate) => _valid(rate) != null)
-              .toSet()
-              .toList() ??
-          const <double>[]),
+      currentRate: msg.currentRate ?? 60.0,
+      maxRate: msg.maxRate ?? 60.0,
+      minRate: msg.minRate ?? 60.0,
+      supportedRates: msg.supportedRates?.whereType<double>().toList() ?? const [60.0],
       isVariableRefreshRate: msg.isVariableRefreshRate ?? false,
-      engineTargetRate: _valid(msg.engineTargetRate) ?? 0.0,
+      engineTargetRate: msg.engineTargetRate ?? 60.0,
       iosProMotionEnabled: msg.iosProMotionEnabled,
       androidApiLevel: msg.androidApiLevel,
       isLowPowerMode: msg.isLowPowerMode,
@@ -125,22 +90,20 @@ class DisplayInfo {
       hasAdaptiveRefreshRate: msg.hasAdaptiveRefreshRate,
       displayServer: msg.displayServer,
       monitorCount: msg.monitorCount,
-      observedAt: DateTime.now().toUtc(),
-      reportedVariableRefreshRate: msg.isVariableRefreshRate,
     );
   }
 
   /// A safe fallback [DisplayInfo] used before the first [RefreshRate.refresh]
-  /// call completes. Legacy numeric fields use zero for unavailable; prefer nullable observation getters.
+  /// call completes. Assumes a standard 60 Hz non-VRR display.
   static const DisplayInfo fallback = DisplayInfo(
-    currentRate: 0.0,
-    maxRate: 0.0,
-    minRate: 0.0,
-    supportedRates: [],
-    isVariableRefreshRate: false,
-    engineTargetRate: 0.0,
-    thermalState: ThermalState.unknown,
-  );
+        currentRate: 60.0,
+        maxRate: 60.0,
+        minRate: 60.0,
+        supportedRates: [60.0],
+        isVariableRefreshRate: false,
+        engineTargetRate: 60.0,
+        thermalState: ThermalState.unknown,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -152,31 +115,11 @@ class DisplayInfo {
           isVariableRefreshRate == other.isVariableRefreshRate &&
           engineTargetRate == other.engineTargetRate &&
           thermalState == other.thermalState &&
-          isLowPowerMode == other.isLowPowerMode &&
-          listEquals(supportedRates, other.supportedRates) &&
-          iosProMotionEnabled == other.iosProMotionEnabled &&
-          androidApiLevel == other.androidApiLevel &&
-          hasAdaptiveRefreshRate == other.hasAdaptiveRefreshRate &&
-          displayServer == other.displayServer &&
-          monitorCount == other.monitorCount &&
-          reportedVariableRefreshRate == other.reportedVariableRefreshRate;
+          isLowPowerMode == other.isLowPowerMode;
 
   @override
-  int get hashCode => Object.hash(
-      currentRate,
-      maxRate,
-      minRate,
-      isVariableRefreshRate,
-      engineTargetRate,
-      thermalState,
-      isLowPowerMode,
-      Object.hashAll(supportedRates),
-      iosProMotionEnabled,
-      androidApiLevel,
-      hasAdaptiveRefreshRate,
-      displayServer,
-      monitorCount,
-      reportedVariableRefreshRate);
+  int get hashCode => Object.hash(currentRate, maxRate, minRate,
+      isVariableRefreshRate, engineTargetRate, thermalState, isLowPowerMode);
 
   @override
   String toString() =>

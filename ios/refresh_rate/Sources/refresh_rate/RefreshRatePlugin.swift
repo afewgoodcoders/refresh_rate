@@ -2,92 +2,196 @@ import Flutter
 import UIKit
 import QuartzCore
 
-/// Query and opt-in callback observation. No process-wide display-link hooks.
+#if SWIFT_PACKAGE
+import refresh_rate_objc
+#endif
+
 public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
-    private weak var viewController: UIViewController?
+
     private var flutterApi: RefreshRateFlutterApi?
-    private var channel: FlutterMethodChannel?
-    private var observers: [NSObjectProtocol] = []
-    private var link: CADisplayLink?
-    private var callbackHz: Double?
-    private var expectedHz: Double?
-    private var lastTimestamp: CFTimeInterval?
-    private var sampleCount = 0
+    private var displayLink: CADisplayLink?
+    private var boostDisplayLink: CADisplayLink?
+    private var lastReportedRate: Double = 0
+    private var powerObserver: NSObjectProtocol?
+    private var thermalObserver: NSObjectProtocol?
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance = RefreshRatePlugin()
-        instance.viewController = registrar.viewController
-        instance.flutterApi = RefreshRateFlutterApi(binaryMessenger: registrar.messenger())
         RefreshRateHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: instance)
-        let channel = FlutterMethodChannel(name: "refresh_rate/control", binaryMessenger: registrar.messenger())
-        instance.channel = channel
-        channel.setMethodCallHandler { [weak instance] call, result in
-            guard let self = instance else { result(FlutterError(code: "detached", message: "Engine detached", details: nil)); return }
-            switch call.method {
-            case "capabilities": result(["query": true, "engineControl": false, "presentationObservation": false])
-            case "request":
-                let args = call.arguments as? [String: Any]
-                let clear = args?["kind"] as? String == "system"
-                result(["status": clear ? "submitted" : "unsupported", "backend": clear ? "clearOwnedPreference" : "unavailable",
-                    "scope": "flutterEngine", "message": "No supported per-engine rate-control integration is installed. System scheduling remains in control."])
-            case "startObservation":
-                self.startObservation(); result(nil)
-            case "stopObservation":
-                self.stopObservation(); result(nil)
-            case "diagnostics":
-                result(["source": "appleDisplayLink", "callbackHz": self.callbackHz as Any,
-                    "expectedCallbackHz": self.expectedHz as Any, "sampleCount": self.sampleCount,
-                    "scope": "pluginObserver", "maximumHz": self.screen.map { Double($0.maximumFramesPerSecond) } as Any])
-            default: result(FlutterMethodNotImplemented)
-            }
-        }
-        registrar.publish(instance)
-        instance.registerObservers()
+        instance.flutterApi = RefreshRateFlutterApi(binaryMessenger: registrar.messenger())
+        instance.startMonitoring()
     }
-    private var screen: UIScreen? { viewController?.viewIfLoaded?.window?.screen }
+
+    // MARK: - RefreshRateHostApi
+
     func getDisplayInfo() throws -> DisplayInfoMessage {
-        DisplayInfoMessage(currentRate: nil,
-            maxRate: screen.map { Double($0.maximumFramesPerSecond) }, minRate: nil,
-            supportedRates: nil, isVariableRefreshRate: nil, engineTargetRate: nil,
-            iosProMotionEnabled: Bundle.main.object(forInfoDictionaryKey: "CADisableMinimumFrameDurationOnPhone") as? Bool,
-            isLowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
-            thermalStateIndex: thermalIndex(), hasAdaptiveRefreshRate: nil)
+        let maxRate = getMaxRefreshRate()
+        let currentRate = getCurrentRefreshRate()
+        let proMotion = isProMotionPlistKeySet()
+        let isLow = ProcessInfo.processInfo.isLowPowerModeEnabled
+        let thermal = thermalIndex()
+
+        return DisplayInfoMessage(
+            currentRate: currentRate,
+            maxRate: maxRate,
+            minRate: 60.0,
+            supportedRates: getSupportedRefreshRates(),
+            isVariableRefreshRate: maxRate > 60,
+            engineTargetRate: currentRate,
+            iosProMotionEnabled: proMotion,
+            androidApiLevel: nil,
+            isLowPowerMode: isLow,
+            thermalStateIndex: thermal,
+            hasAdaptiveRefreshRate: maxRate > 60,
+            displayServer: nil,
+            monitorCount: nil
+        )
     }
-    private func unsupported() throws { throw PigeonError(code: "unsupported", message: "Flutter engine rate control is unavailable without a qualified integration", details: nil) }
-    func enable() throws { try unsupported() }
-    func preferMax() throws { try unsupported() }
-    func disable() throws { /* No owned engine preference to clear. */ }
-    func preferDefault() throws { try disable() }
-    func matchContent(fps: Double) throws { try unsupported() }
-    func boost(durationMs: Int64) throws { try unsupported() }
-    func setCategory(categoryIndex: Int64) throws { try unsupported() }
-    func setTouchBoost(enabled: Bool) throws { try unsupported() }
-    func isSupported() throws -> Bool { false }
-    private func startObservation() {
-        guard link == nil else { return }
-        callbackHz = nil; expectedHz = nil; lastTimestamp = nil; sampleCount = 0
-        let observer = CADisplayLink(target: self, selector: #selector(tick))
-        observer.isPaused = UIApplication.shared.applicationState != .active
-        observer.add(to: .main, forMode: .common); link = observer
+
+    func enable() throws { try setToMax(forceHighest: false) }
+    func disable() throws { resetCap() }
+    func preferMax() throws { try setToMax(forceHighest: false) }
+    func preferDefault() throws { resetCap() }
+
+    func matchContent(fps: Double) throws {
+        guard #available(iOS 15.0, *) else { return }
+        let maxRate = getMaxRefreshRate()
+        let multiple = max(1.0, (maxRate / fps).rounded(.down))
+        let preferredMax = fps * multiple
+        RRSetOverrideMaxRate(Float(fps))
+        RRApplyOverrideToTrackedLinks()
+        setupBoostDisplayLink(min: fps, max: preferredMax, preferred: preferredMax)
     }
-    private func stopObservation() { link?.invalidate(); link = nil; lastTimestamp = nil; callbackHz = nil; expectedHz = nil; sampleCount = 0 }
-    @objc private func tick(_ sender: CADisplayLink) {
-        let interval = sender.targetTimestamp - sender.timestamp
-        expectedHz = interval > 0 ? 1 / interval : nil
-        if let last = lastTimestamp, sender.timestamp > last { callbackHz = 1 / (sender.timestamp - last); sampleCount += 1 }
-        lastTimestamp = sender.timestamp
-    }
-    private func registerObservers() {
-        for name in [Notification.Name.NSProcessInfoPowerStateDidChange,
-            ProcessInfo.thermalStateDidChangeNotification,
-            UIApplication.didBecomeActiveNotification, UIApplication.willResignActiveNotification] {
-            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
-                guard let self = self else { return }
-                if notification.name == UIApplication.willResignActiveNotification { self.link?.isPaused = true; self.lastTimestamp = nil; self.callbackHz = nil }
-                if notification.name == UIApplication.didBecomeActiveNotification { self.link?.isPaused = false; self.lastTimestamp = nil }
-                if let info = try? self.getDisplayInfo() { self.flutterApi?.onDisplayInfoChanged(info: info) { _ in } }
-            })
+
+    func boost(durationMs: Int64) throws {
+        guard #available(iOS 15.0, *) else { return }
+        let maxRate = getMaxRefreshRate()
+        RRSetOverrideMaxRate(0)
+        RRApplyOverrideToTrackedLinks()
+        setupBoostDisplayLink(min: max(maxRate * 0.66, 60.0), max: maxRate, preferred: maxRate)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(durationMs) / 1000.0) {
+            self.removeBoostDisplayLink()
+            RRSetOverrideMaxRate(0)
+            RRApplyOverrideToTrackedLinks()
         }
     }
+
+    func setCategory(categoryIndex: Int64) throws {
+        switch categoryIndex {
+        case 3: try? enable()
+        case 0, 1: try? disable()
+        default: break
+        }
+    }
+
+    func setTouchBoost(enabled: Bool) throws {
+        // No iOS equivalent; no-op
+    }
+
+    func isSupported() throws -> Bool {
+        if #available(iOS 15.0, *) { return getMaxRefreshRate() > 60 }
+        return false
+    }
+
+    // MARK: - Private control
+
+    private func setToMax(forceHighest: Bool) throws {
+        let maxRate = getMaxRefreshRate()
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        let unlocked = isProMotionPlistKeySet() || isPad
+        if !unlocked { logPlistWarning(maxRate: maxRate) }
+        guard #available(iOS 15.0, *) else { return }
+        RRSetOverrideMaxRate(0)
+        RRApplyOverrideToTrackedLinks()
+        if forceHighest {
+            setupBoostDisplayLink(min: max(maxRate * 0.66, 60.0), max: maxRate, preferred: maxRate)
+        } else {
+            removeBoostDisplayLink()
+        }
+    }
+
+    private func resetCap() {
+        RRSetOverrideMaxRate(60.0)
+        RRApplyOverrideToTrackedLinks()
+        removeBoostDisplayLink()
+    }
+
+    // MARK: - Boost display link
+
+    @available(iOS 15.0, *)
+    private func setupBoostDisplayLink(min: Double, max: Double, preferred: Double) {
+        removeBoostDisplayLink()
+        let link = CADisplayLink(target: self, selector: #selector(boostFired))
+        RRBypassDisplayLink(link)
+        link.preferredFrameRateRange = CAFrameRateRange(
+            minimum: Float(min), maximum: Float(max), preferred: Float(preferred))
+        link.add(to: .main, forMode: .common)
+        boostDisplayLink = link
+    }
+
+    private func removeBoostDisplayLink() {
+        boostDisplayLink?.invalidate()
+        boostDisplayLink = nil
+    }
+
+    @objc private func boostFired(_ link: CADisplayLink) {}
+
+    // MARK: - Monitoring
+
+    @objc private func monitorLinkFired(_ link: CADisplayLink) {
+        let rate = link.duration > 0 ? 1.0 / link.duration : 60.0
+        if abs(rate - lastReportedRate) > 5.0 {
+            lastReportedRate = rate
+            let info = (try? getDisplayInfo()) ?? DisplayInfoMessage(
+                currentRate: rate, maxRate: rate, minRate: 60.0,
+                supportedRates: [60.0, rate], isVariableRefreshRate: rate > 60,
+                engineTargetRate: rate, iosProMotionEnabled: nil,
+                androidApiLevel: nil, isLowPowerMode: nil,
+                thermalStateIndex: nil, hasAdaptiveRefreshRate: nil,
+                displayServer: nil, monitorCount: nil)
+            flutterApi?.onDisplayInfoChanged(info: info) { _ in }
+        }
+    }
+
+    private func startMonitoring() {
+        if displayLink == nil {
+            let link = CADisplayLink(target: self, selector: #selector(monitorLinkFired))
+            RRBypassDisplayLink(link)
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+        powerObserver = NotificationCenter.default.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
+                guard let info = try? self?.getDisplayInfo() else { return }
+                self?.flutterApi?.onDisplayInfoChanged(info: info) { _ in }
+        }
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                guard let info = try? self?.getDisplayInfo() else { return }
+                self?.flutterApi?.onDisplayInfoChanged(info: info) { _ in }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func getMaxRefreshRate() -> Double { Double(UIScreen.main.maximumFramesPerSecond) }
+
+    private func getCurrentRefreshRate() -> Double {
+        if let link = displayLink, link.duration > 0 { return 1.0 / link.duration }
+        let max = getMaxRefreshRate()
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        return (max > 60 && (isProMotionPlistKeySet() || isPad)) ? max : 60.0
+    }
+
+    private func getSupportedRefreshRates() -> [Double] {
+        let max = getMaxRefreshRate()
+        return max > 60 ? [60.0, max] : [60.0]
+    }
+
+    private func isProMotionPlistKeySet() -> Bool {
+        return Bundle.main.object(forInfoDictionaryKey: "CADisableMinimumFrameDurationOnPhone") as? Bool ?? false
+    }
+
     private func thermalIndex() -> Int64? {
         switch ProcessInfo.processInfo.thermalState {
         case .nominal: return 0
@@ -97,10 +201,14 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
         @unknown default: return nil
         }
     }
-    public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
-        stopObservation(); channel?.setMethodCallHandler(nil); channel = nil
-        observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
-        RefreshRateHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: nil)
+
+    private func logPlistWarning(maxRate: Double) {
+        print("""
+        ⚠️ [refresh_rate] CADisableMinimumFrameDurationOnPhone not set in Info.plist!
+        App is locked to 60Hz on this \(maxRate)Hz device.
+        Add to ios/Runner/Info.plist:
+          <key>CADisableMinimumFrameDurationOnPhone</key>
+          <true/>
+        """)
     }
-    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 }

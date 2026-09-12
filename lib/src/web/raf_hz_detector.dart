@@ -1,85 +1,63 @@
 import 'dart:async';
 import 'dart:js_interop';
+
 import 'package:web/web.dart' as web;
 
-/// Browser callback cadence; never physical panel capability or presented FPS.
+/// Detects the display's refresh rate by measuring
+/// `requestAnimationFrame` callback intervals.
+///
+/// Uses the same technique as TestUFO: collect a window of rAF
+/// timestamps, compute the median inter-frame interval, and derive Hz.
 class RafHzDetector {
-  static Future<double?>? _pending;
-  static void Function()? _cancel;
+  /// Number of frames to sample before reporting a result.
+  static const int _kSampleCount = 120;
 
-  /// Number of records represented by the measurement.
-  static int sampleCount = 0;
-
-  /// Difference between sampled 95th and 5th interval percentiles.
-  static double? dispersionMs;
-
-  /// Duration covered by the most recent successful callback measurement.
-  static Duration? measurementWindow;
-
-  /// UTC time when the observation was collected or received.
-  static DateTime? observedAt;
-
-  /// Cancels the shared in-flight callback measurement and releases listeners.
-  static void cancel() => _cancel?.call();
-
-  /// Measures raw browser callback cadence with visibility and timeout bounds.
-  static Future<double?> measure(
-      {Duration timeout = const Duration(seconds: 5)}) {
-    if (_pending != null) return _pending!;
-    if (timeout <= Duration.zero || timeout > const Duration(seconds: 30)) {
-      throw ArgumentError('Invalid timeout');
-    }
-    if (web.document.hidden) return Future.value(null);
+  /// Measures the current display refresh rate via rAF timing.
+  ///
+  /// Collects [_kSampleCount] frames, computes the median interval,
+  /// and returns `1000 / medianMs`.  Returns `null` if measurement fails.
+  static Future<double?> measure() {
     final completer = Completer<double?>();
-    _pending = completer.future;
-    sampleCount = 0;
-    dispersionMs = null;
-    measurementWindow = null;
-    observedAt = null;
-    final stamps = <double>[];
-    var requestId = 0;
-    Timer? timer;
-    late final JSFunction callback, visibility;
-    void finish(double? rate) {
-      if (completer.isCompleted) return;
-      web.window.cancelAnimationFrame(requestId);
-      timer?.cancel();
-      web.document.removeEventListener('visibilitychange', visibility);
-      _pending = null;
-      _cancel = null;
-      if (rate != null) observedAt = DateTime.now().toUtc();
-      completer.complete(rate);
+    final timestamps = <double>[];
+    late final JSFunction callback;
+
+    void onFrame(JSNumber ts) {
+      timestamps.add(ts.toDartDouble);
+
+      if (timestamps.length >= _kSampleCount + 1) {
+        // Compute intervals
+        final intervals = <double>[];
+        for (var i = 1; i < timestamps.length; i++) {
+          intervals.add(timestamps[i] - timestamps[i - 1]);
+        }
+        intervals.sort();
+        final median = intervals[intervals.length ~/ 2];
+
+        if (median > 0) {
+          // Round to nearest common Hz value (e.g. 60, 90, 120, 144, 165, 240)
+          final rawHz = 1000.0 / median;
+          completer.complete(_snapToCommonHz(rawHz));
+        } else {
+          completer.complete(null);
+        }
+      } else {
+        web.window.requestAnimationFrame(callback);
+      }
     }
 
-    visibility = ((web.Event _) {
-      if (web.document.hidden) finish(null);
-    }).toJS;
-    callback = ((JSNumber timestamp) {
-      if (completer.isCompleted) return;
-      final ts = timestamp.toDartDouble;
-      if (!ts.isFinite || (stamps.isNotEmpty && ts <= stamps.last)) {
-        finish(null);
-        return;
-      }
-      stamps.add(ts);
-      if (stamps.length >= 121) {
-        final intervals = [
-          for (var i = 1; i < stamps.length; i++) stamps[i] - stamps[i - 1]
-        ]..sort();
-        final median = (intervals[59] + intervals[60]) / 2;
-        sampleCount = intervals.length;
-        dispersionMs = intervals[113] - intervals[5];
-        measurementWindow = Duration(
-            microseconds: ((stamps.last - stamps.first) * 1000).round());
-        finish(median > 0 ? 1000 / median : null);
-      } else {
-        requestId = web.window.requestAnimationFrame(callback);
-      }
-    }).toJS;
-    _cancel = () => finish(null);
-    web.document.addEventListener('visibilitychange', visibility);
-    timer = Timer(timeout, () => finish(null));
-    requestId = web.window.requestAnimationFrame(callback);
+    callback = onFrame.toJS;
+    web.window.requestAnimationFrame(callback);
+
     return completer.future;
+  }
+
+  /// Snaps a raw Hz measurement to the nearest common display refresh rate
+  /// when the raw value is within 3% tolerance.
+  static double _snapToCommonHz(double raw) {
+    const commonRates = [30.0, 48.0, 60.0, 72.0, 90.0, 120.0, 144.0, 165.0, 240.0, 360.0];
+    for (final rate in commonRates) {
+      if ((raw - rate).abs() / rate < 0.03) return rate;
+    }
+    return double.parse(raw.toStringAsFixed(1));
   }
 }

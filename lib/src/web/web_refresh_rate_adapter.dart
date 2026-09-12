@@ -9,22 +9,7 @@ import 'raf_hz_detector.dart';
 /// Uses `requestAnimationFrame` interval timing to detect the display's
 /// current refresh rate.  Control methods are graceful no-ops because
 /// browsers own their vsync scheduling and expose no API to change it.
-class WebRefreshRateApiAdapter
-    implements RefreshRateApiAdapter, RefreshRateDiagnosticsAdapter {
-  @override
-  Future<Map<Object?, Object?>> diagnostics() async => {
-        'source': 'requestAnimationFrame',
-        'callbackHz': _lastMeasuredRate,
-        'sampleCount': RafHzDetector.sampleCount,
-        'windowUs': RafHzDetector.measurementWindow?.inMicroseconds,
-        'dispersionMs': RafHzDetector.dispersionMs,
-      };
-  @override
-  Future<Map<Object?, Object?>> observeNativeCadence(Duration duration) async {
-    _lastMeasuredRate = await RafHzDetector.measure(timeout: duration);
-    return diagnostics();
-  }
-
+class WebRefreshRateApiAdapter implements RefreshRateApiAdapter {
   double? _lastMeasuredRate;
 
   @override
@@ -33,11 +18,11 @@ class WebRefreshRateApiAdapter
     return DisplayInfoMessage(
       currentRate: _lastMeasuredRate,
       // Browsers don't expose max/min/supported rates.
-      maxRate: null,
+      maxRate: _lastMeasuredRate,
       minRate: null,
-      supportedRates: null,
+      supportedRates: _lastMeasuredRate != null ? [_lastMeasuredRate!] : null,
       isVariableRefreshRate: null,
-      engineTargetRate: null,
+      engineTargetRate: _lastMeasuredRate,
       // Apple / Android specific — not applicable on web.
       iosProMotionEnabled: null,
       androidApiLevel: null,
@@ -46,7 +31,7 @@ class WebRefreshRateApiAdapter
       thermalStateIndex: null,
       hasAdaptiveRefreshRate: null,
       displayServer: 'web',
-      monitorCount: null,
+      monitorCount: 1,
     );
   }
 

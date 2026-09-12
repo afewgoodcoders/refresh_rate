@@ -1,8 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
-import 'models/rate_diagnostics.dart';
-import 'control/rate_controller.dart';
-import 'control/auto_controller.dart';
 import 'package:flutter/widgets.dart';
 
 import 'generated/refresh_rate_api.g.dart';
@@ -18,9 +14,9 @@ import 'verification/refresh_rate_session.dart';
 ///
 /// ### Quick-start
 /// ```dart
-/// // Request a high refresh rate and inspect the submission result.
+/// // Unlock the highest supported refresh rate.
 /// await RefreshRate.refresh();
-/// final result = await RefreshRate.preferMax();
+/// RefreshRate.preferMax();
 ///
 /// // Show an FPS overlay for debugging.
 /// RefreshRate.showFPS();
@@ -31,164 +27,7 @@ class RefreshRate {
   static RefreshRateApiAdapter _api = PigeonRefreshRateApiAdapter();
   static DisplayInfo _cachedInfo = DisplayInfo.fallback;
   static StreamController<DisplayInfo>? _changedController;
-  static RateController? _controller;
-  static RefreshRateLease? _manual;
-  static int _readGeneration = 0;
-
-  /// Shared preference arbiter used by this integration.
-  static RateController get controller =>
-      _controller ??= RateController(_submit);
-
-  /// Broadcast decision history, separate from native display observations.
-  static Stream<RefreshRateDecision> get onDecision => controller.decisions;
-
-  /// Bounded recent package request decisions.
-  static List<RefreshRateDecision> get decisionHistory => controller.history;
-
-  /// Application preference before OS policy or capability constraints.
-  static RatePreference get requestedPreference =>
-      controller.effectivePreference;
-
-  /// Supported operations, separate from observed outcomes.
-  static Future<RefreshRateCapabilities> capabilities() async =>
-      _api is RefreshRateRequestAdapter
-          ? (_api as RefreshRateRequestAdapter).capabilities()
-          : const RefreshRateCapabilities();
-
-  /// Acquires a request that can release only its own preference.
-  static RefreshRateLease request(RatePreference preference,
-      {String owner = 'application', int priority = 100, Duration? duration}) {
-    _ensureEvents();
-    return controller.acquire(preference,
-        owner: owner, priority: priority, duration: duration);
-  }
-
-  static Future<RateRequestResult> _submit(RatePreference preference) async {
-    if (_api is RefreshRateRequestAdapter) {
-      return (_api as RefreshRateRequestAdapter).submit(preference);
-    }
-    if (!await _api.isSupported()) {
-      return RateRequestResult(
-          status: RequestStatus.unsupported, preference: preference);
-    }
-    switch (preference.kind) {
-      case PreferenceKind.system:
-        await _api.preferDefault();
-      case PreferenceKind.high:
-        await _api.preferMax();
-      case PreferenceKind.category:
-        await _api.setCategory(preference.category!);
-      case PreferenceKind.content:
-        return RateRequestResult(
-            status: RequestStatus.unsupported,
-            preference: preference,
-            message:
-                'Legacy adapter cannot establish content compatibility/switch strategy.');
-      case PreferenceKind.atLeast:
-        return RateRequestResult(
-            status: RequestStatus.unsupported, preference: preference);
-    }
-    return RateRequestResult(
-        status: RequestStatus.submitted,
-        preference: preference,
-        backend: 'legacyPreference',
-        scope: 'adapter');
-  }
-
-  static Future<RateRequestResult> _setManual(RatePreference preference) {
-    final old = _manual;
-    _manual = request(preference, owner: 'imperative');
-    old?.release();
-    // Releasing the former owner can coalesce the first submission.
-    return controller.reconcile(reason: 'imperativePreference');
-  }
-
   static final _flutterApi = _RefreshRateFlutterApiImpl();
-
-  /// Enumerates displays known to Flutter without guessing native capabilities.
-  static List<FlutterDisplaySnapshot> get displays {
-    final now = DateTime.now().toUtc();
-    return List.unmodifiable(WidgetsBinding.instance.platformDispatcher.displays
-        .map((display) => FlutterDisplaySnapshot(
-            id: display.id,
-            widthPixels: display.size.width,
-            heightPixels: display.size.height,
-            devicePixelRatio: display.devicePixelRatio,
-            reportedRefreshRate:
-                display.refreshRate.isFinite && display.refreshRate > 0
-                    ? display.refreshRate
-                    : null,
-            observedAt: now)));
-  }
-
-  /// Read source-qualified information for an optional explicit Flutter view.
-  /// Flutter's reported display rate is not an observed engine FPS cap.
-  static Future<RateDiagnostics> diagnostics({ui.FlutterView? view}) async {
-    final info = await refresh();
-    final native = _api is RefreshRateDiagnosticsAdapter
-        ? await (_api as RefreshRateDiagnosticsAdapter).diagnostics()
-        : <Object?, Object?>{};
-    final now = DateTime.now().toUtc();
-    RateObservation observation(double? value, String source, String scope,
-            {int? count, Duration? window}) =>
-        RateObservation(
-            value: value != null && value.isFinite && value > 0 ? value : null,
-            source: source,
-            scope: scope,
-            observedAt: now,
-            sampleCount: count,
-            window: window,
-            unavailableReason:
-                value == null ? 'No qualified source available' : null);
-    return RateDiagnostics(
-        requestedPreference: requestedPreference,
-        nativeReportedDisplayHz: observation(
-            info.nativeReportedDisplayHz,
-            native['source'] as String? ?? 'nativeDisplayApi',
-            native['displayId'] as String? ?? 'activeWindow'),
-        engineReportedDisplayHz: observation(view?.display.refreshRate,
-            'flutterDisplay', view?.viewId.toString() ?? 'unspecifiedView'),
-        nativeCallbackCadenceHz: observation(
-            (native['callbackHz'] as num?)?.toDouble() ??
-                info.nativeCallbackCadenceHz,
-            info.displayServer == 'web'
-                ? 'requestAnimationFrame'
-                : 'pluginDisplayLink',
-            'observer',
-            count: (native['sampleCount'] as num?)?.toInt(),
-            window: native['windowUs'] is num
-                ? Duration(microseconds: (native['windowUs'] as num).toInt())
-                : null),
-        displayModeMaxHz: observation(
-            info.displayModeMaxHz, 'nativeDisplayCapability', 'activeWindow'),
-        capabilities: await capabilities(),
-        displayId: native['displayId'] as String?,
-        suggestedNormalHz: (native['suggestedNormalHz'] as num?)?.toDouble(),
-        suggestedHighHz: (native['suggestedHighHz'] as num?)?.toDouble());
-  }
-
-  /// Explicitly enables an observer for a bounded interval; it affects workload.
-  static Future<RateObservation> observeNativeCadence(
-      {Duration duration = const Duration(seconds: 1)}) async {
-    if (duration < const Duration(milliseconds: 100) ||
-        duration > const Duration(seconds: 5)) {
-      throw ArgumentError('Observation duration must be 100ms–5s');
-    }
-    final data = _api is RefreshRateDiagnosticsAdapter
-        ? await (_api as RefreshRateDiagnosticsAdapter)
-            .observeNativeCadence(duration)
-        : <Object?, Object?>{};
-    return RateObservation(
-        value: (data['callbackHz'] as num?)?.toDouble(),
-        source: data['source'] as String? ?? 'unavailable',
-        scope: 'pluginObserver',
-        observedAt: DateTime.now().toUtc(),
-        sampleCount: (data['sampleCount'] as num?)?.toInt(),
-        window: duration,
-        unavailableReason: data['callbackHz'] == null
-            ? 'Observer unsupported or no active callbacks'
-            : null);
-  }
 
   // ── Platform registration ──────────────────────────────────────
 
@@ -198,7 +37,6 @@ class RefreshRate {
   /// framework initialisation.  Not intended for end-user consumption.
   static void registerAdapter(RefreshRateApiAdapter adapter) {
     _api = adapter;
-    _readGeneration++;
   }
 
   // ── Test seam ──────────────────────────────────────────────────
@@ -208,7 +46,6 @@ class RefreshRate {
   /// Call [clearApiForTesting] in `tearDown` to restore the real adapter.
   @visibleForTesting
   static void setApiForTesting(RefreshRateApiAdapter api) {
-    clearApiForTesting();
     _api = api;
   }
 
@@ -217,11 +54,6 @@ class RefreshRate {
   /// Must be called in `tearDown` after [setApiForTesting].
   @visibleForTesting
   static void clearApiForTesting() {
-    _controller?.dispose();
-    _controller = null;
-    _manual = null;
-    _cachedInfo = DisplayInfo.fallback;
-    _readGeneration++;
     _api = PigeonRefreshRateApiAdapter();
     _flutterApi._onChanged = null;
     RefreshRateFlutterApi.setUp(null);
@@ -231,83 +63,74 @@ class RefreshRate {
 
   // ── Control ────────────────────────────────────────────────────
 
-  /// Requests high refresh through the qualified backend, as [preferMax].
-  /// Unsupported engine-control paths return an explicit unsupported result.
-  static Future<RateRequestResult> enable() => preferMax();
-
-  /// Removes the imperative owner's request; other owners remain active.
-  static Future<RateRequestResult> disable() => preferDefault();
-
-  /// Requests high refresh through the qualified platform backend.
-  static Future<RateRequestResult> preferMax() =>
-      _setManual(const RatePreference.high());
-
-  /// Releases the imperative owner while preserving independent requests.
-  static Future<RateRequestResult> preferDefault() {
-    final old = _manual;
-    _manual = null;
-    return old?.release() ?? controller.reconcile(reason: 'clearImperative');
+  /// Opts the app into the platform's high-refresh-rate rendering pipeline.
+  ///
+  /// On Android this sets `preferredDisplayModeId` on the window surface.
+  /// On iOS/macOS this adjusts `CADisplayLink` preferred frame rate ranges.
+  /// Has no effect on platforms that do not support variable refresh rates.
+  static void enable() {
+    _api.enable();
+    _refreshInfo();
   }
 
-  /// Submits exact content FPS and transition semantics where supported.
-  static Future<RateRequestResult> matchContent(
-    double fps, {
-    FrameRateSwitchStrategy strategy = FrameRateSwitchStrategy.seamlessOnly,
-  }) =>
-      _setManual(RatePreference.content(fps, strategy: strategy));
+  /// Reverts the app to the platform default (typically 60 Hz).
+  ///
+  /// On iOS this allows the OS to manage the frame rate automatically.
+  static void disable() {
+    _api.disable();
+    _refreshInfo();
+  }
 
-  /// Requests minimum UI cadence where the backend supports it.
-  static Future<RateRequestResult> preferAtLeast(double fps) =>
-      _setManual(RatePreference.atLeast(fps));
+  /// Requests the maximum supported refresh rate for this display.
+  ///
+  /// Equivalent to calling [enable] then letting the platform pick the ceiling.
+  static void preferMax() => _api.preferMax();
 
-  /// Acquires a timed high-rate lease without resetting unrelated requests.
-  static Future<RateRequestResult> boost(Duration duration) =>
-      request(const RatePreference.high(),
-              owner: 'boost', priority: 200, duration: duration)
-          .ready;
+  /// Reverts to the display's default / preferred refresh rate.
+  static void preferDefault() => _api.preferDefault();
 
-  /// Attach until explicitly disposed. Supports running/repeating/reverse animations.
-  static VoidCallback boostDuring(AnimationController animation) {
-    RefreshRateLease? lease;
-    void update() {
-      if (animation.isAnimating) {
-        lease ??= request(const RatePreference.high(),
-            owner: 'animation', priority: 150);
-      } else {
-        lease?.release();
-        lease = null;
+  /// Requests a refresh rate that matches the given [fps] content rate.
+  ///
+  /// Useful when playing back video at a fixed frame rate (e.g. 24, 30, 60 fps)
+  /// so the display cadence aligns with the media cadence.
+  static void matchContent(double fps) => _api.matchContent(fps);
+
+  /// Temporarily boosts the display to its maximum refresh rate for [duration].
+  ///
+  /// Commonly used when a gesture or animation starts — the display snaps to
+  /// high-Hz immediately and returns to the preferred rate after the duration.
+  static void boost(Duration duration) =>
+      _api.boost(duration.inMilliseconds);
+
+  /// Boosts the refresh rate for the lifetime of an [AnimationController].
+  ///
+  /// Registers a status listener that calls [boost] whenever the controller
+  /// starts animating, and removes itself once the animation is done.
+  static void boostDuring(AnimationController controller) {
+    late final void Function(AnimationStatus) statusListener;
+    statusListener = (status) {
+      if (status == AnimationStatus.forward ||
+          status == AnimationStatus.reverse) {
+        _api.boost(controller.duration?.inMilliseconds ?? 500);
+      } else if (status == AnimationStatus.completed ||
+                 status == AnimationStatus.dismissed) {
+        controller.removeStatusListener(statusListener);
       }
-    }
-
-    void status(AnimationStatus _) => update();
-    animation.addStatusListener(status);
-    animation.addListener(update);
-    update();
-    var disposed = false;
-    return () {
-      if (disposed) return;
-      disposed = true;
-      animation.removeStatusListener(status);
-      animation.removeListener(update);
-      lease?.release();
-      lease = null;
     };
+    controller.addStatusListener(statusListener);
   }
 
-  /// Native category index: none, low, normal or high (0–3).
-  static Future<RateRequestResult> category(RateCategory c) =>
-      _setManual(RatePreference.category(c.index));
+  /// Sets a named [RateCategory] hint for the display scheduler.
+  ///
+  /// Categories let you declare the performance class of your app
+  /// (`low`, `normal`, `high`) rather than specifying raw Hz values.
+  static void category(RateCategory c) => _api.setCategory(c.index);
 
-  /// Legacy native touch hint; use RefreshRateInteraction for owned interaction boosts.
-  static Future<void> setTouchBoost(bool enabled) async =>
-      await _api.setTouchBoost(enabled);
-
-  /// Creates an opt-in policy driven by explicit activity adapters.
-  static RefreshRateAutoController auto(
-          {RefreshRatePolicy policy = RefreshRatePolicy.balanced,
-          Duration idleDelay = const Duration(milliseconds: 800)}) =>
-      RefreshRateAutoController(controller, onChanged,
-          policy: policy, idleDelay: idleDelay, initialInfo: info);
+  /// Enables or disables an automatic boost whenever the user touches the screen.
+  ///
+  /// When [enabled] is `true` the platform raises the refresh rate on every
+  /// touch-down event and lowers it again after a short idle period.
+  static void setTouchBoost(bool enabled) => _api.setTouchBoost(enabled);
 
   // ── Verification overlays ──────────────────────────────────────
 
@@ -330,7 +153,7 @@ class RefreshRate {
 
   /// The most recently fetched [DisplayInfo] snapshot.
   ///
-  /// Initialised to [DisplayInfo.fallback] (unknown rates)
+  /// Initialised to [DisplayInfo.fallback] (60 Hz, all optional fields null)
   /// until [refresh] is awaited at least once.
   static DisplayInfo get info => _cachedInfo;
 
@@ -338,44 +161,38 @@ class RefreshRate {
   ///
   /// Resolves with the updated [DisplayInfo] on success.
   static Future<DisplayInfo> refresh() async {
-    _ensureEvents();
-    final generation = ++_readGeneration;
     final msg = await _api.getDisplayInfo();
-    final info = DisplayInfo.fromMessage(msg);
-    if (generation == _readGeneration) {
-      _cachedInfo = info;
-      _changedController?.add(info);
-    }
-    return info;
+    _cachedInfo = DisplayInfo.fromMessage(msg);
+    return _cachedInfo;
   }
 
-  /// Native display snapshots; subscription alone does not schedule Flutter frames.
+  /// A broadcast stream that emits a new [DisplayInfo] whenever the display
+  /// configuration changes (e.g. the user enables Low Power Mode, or the
+  /// device throttles under thermal pressure).
   static Stream<DisplayInfo> get onChanged {
-    _ensureEvents();
+    if (_changedController == null) {
+      _changedController = StreamController<DisplayInfo>.broadcast();
+      _flutterApi._onChanged = (info) {
+        _cachedInfo = info;
+        _changedController!.add(info);
+      };
+      RefreshRateFlutterApi.setUp(_flutterApi);
+    }
     return _changedController!.stream;
-  }
-
-  static void _ensureEvents() {
-    if (_changedController != null) return;
-    _changedController = StreamController<DisplayInfo>.broadcast();
-    _flutterApi._onChanged = (info) {
-      _readGeneration++;
-      _cachedInfo = info;
-      _changedController?.add(info);
-    };
-    RefreshRateFlutterApi.setUp(_flutterApi);
   }
 
   /// Whether iOS ProMotion (adaptive 120 Hz) is enabled for this app.
   ///
   /// Returns `false` until a successful [refresh] is completed and the device
   /// is an iPhone/iPad with a ProMotion display.
-  static bool get isProMotionReady => _cachedInfo.iosProMotionEnabled == true;
+  static bool get isProMotionReady =>
+      _cachedInfo.iosProMotionEnabled == true;
 
   /// Whether the device is currently in Low Power Mode.
   ///
   /// Defaults to `false` when the value cannot be determined.
-  static bool get isLowPowerMode => _cachedInfo.isLowPowerMode ?? false;
+  static bool get isLowPowerMode =>
+      _cachedInfo.isLowPowerMode ?? false;
 
   /// The current thermal state of the device.
   ///
@@ -389,13 +206,34 @@ class RefreshRate {
   ///
   /// Call [RefreshRateSession.end] when the scenario under test completes to
   /// receive a [SessionReport] with verdict, FPS stats, and bottleneck hints.
-  static RefreshRateSession startSession(String name,
-          {double? expectedFps,
-          Duration finalizationTimeout = const Duration(milliseconds: 1100)}) =>
-      RefreshRateSession.create(name, _cachedInfo,
-          expectedFps: expectedFps,
-          changes: onChanged,
-          finalizationTimeout: finalizationTimeout);
+  static RefreshRateSession startSession(String name) {
+    return RefreshRateSession.create(name, _cachedInfo);
+  }
+
+  // ── Internal ───────────────────────────────────────────────────
+
+  static void _refreshInfo() {
+    void handle(DisplayInfoMessage msg) {
+      _cachedInfo = DisplayInfo.fromMessage(msg);
+    }
+    void handleError(Object e) {
+      assert(() {
+        debugPrint('RefreshRate: _refreshInfo error: $e');
+        return true;
+      }());
+    }
+
+    try {
+      final result = _api.getDisplayInfo();
+      if (result is Future<DisplayInfoMessage>) {
+        result.then(handle).catchError(handleError);
+      } else {
+        handle(result);
+      }
+    } catch (e) {
+      handleError(e);
+    }
+  }
 }
 
 class _RefreshRateFlutterApiImpl extends RefreshRateFlutterApi {

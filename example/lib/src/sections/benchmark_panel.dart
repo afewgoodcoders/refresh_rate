@@ -21,7 +21,7 @@ class BenchmarkPanel extends StatelessWidget {
       eyebrow: 'Benchmark',
       title: 'Session Capture',
       subtitle:
-          'Run a named session, exercise scrolling or animations, then inspect coverage and frame phase costs.',
+          'Run a named session, exercise scrolling or animations, then inspect verdict and missed-frame behavior.',
       actions: actions,
       footer: reportItems == null
           ? Container(
