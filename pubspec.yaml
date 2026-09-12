@@ -1,7 +1,7 @@
 name: refresh_rate
 description: >-
-  Unlock 90/120/144Hz on Android, iOS & desktop. Query display rates, control
-  refresh, benchmark FPS with live debug overlays. Uses modern platform APIs.
+  Request display refresh rates, measure Flutter frame cadence and phase
+  timings, and export source-qualified benchmark reports and telemetry.
 version: 1.0.2
 homepage: https://qoder.in/resources/refresh_rate
 repository: https://github.com/qoder-official/refresh_rate

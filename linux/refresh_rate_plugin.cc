@@ -20,6 +20,7 @@
 struct _RefreshRatePlugin {
   GObject parent_instance;
   FlBinaryMessenger* messenger;
+  GWeakRef view;
 };
 
 G_DEFINE_TYPE(RefreshRatePlugin, refresh_rate_plugin, g_object_get_type())
@@ -49,6 +50,7 @@ static void pb_bool(GByteArray* b, gboolean v) { pb_byte(b, v ? 1 : 2); }
 
 static void pb_double(GByteArray* b, double v) {
   pb_byte(b, 6);
+  while (b->len % 8 != 0) pb_byte(b, 0);
   g_byte_array_append(b, (const guint8*)&v, 8);
 }
 
@@ -84,21 +86,21 @@ static GBytes* build_display_info_response(
   // Inner list of 13 fields
   pb_byte(b, 12); pb_varint(b, 13);
 
-  pb_double(b, current);                // 0: currentRate
-  pb_double(b, max_rate);               // 1: maxRate
-  pb_double(b, min_rate);              // 2: minRate
+  if (current > 0) pb_double(b, current); else pb_null(b);                // 0: currentRate
+  pb_null(b);               // 1: maxRate
+  pb_null(b);              // 2: minRate
 
   // 3: supportedRates list
   pb_byte(b, 12); pb_varint(b, n_rates);
   for (int i = 0; i < n_rates; i++) pb_double(b, rates[i]);
 
-  pb_bool(b, is_vrr);                   // 4: isVariableRefreshRate
-  pb_double(b, 60.0);                   // 5: engineTargetRate
+  pb_null(b);                   // 4: isVariableRefreshRate
+  pb_null(b);                   // 5: engineTargetRate
   pb_null(b);                           // 6: iosProMotionEnabled
   pb_null(b);                           // 7: androidApiLevel
   pb_null(b);                           // 8: isLowPowerMode
   pb_null(b);                           // 9: thermalStateIndex
-  pb_bool(b, is_vrr);                   // 10: hasAdaptiveRefreshRate
+  pb_null(b);                   // 10: hasAdaptiveRefreshRate
 
   if (display_server) pb_string(b, display_server);
   else pb_null(b);                      // 11: displayServer
@@ -125,34 +127,15 @@ static GBytes* build_bool_success(gboolean v) {
 
 // ─── GDK display helpers ────────────────────────────────────────────
 
-static GdkMonitor* get_primary_monitor() {
-  GdkDisplay* display = gdk_display_get_default();
-  if (!display) return nullptr;
-  GdkMonitor* monitor = gdk_display_get_primary_monitor(display);
-  if (!monitor) monitor = gdk_display_get_monitor(display, 0);
-  return monitor;
-}
-
-static double get_monitor_rate(GdkMonitor* monitor) {
-  if (!monitor) return 60.0;
-  int rate_mhz = gdk_monitor_get_refresh_rate(monitor);
-  return rate_mhz > 0 ? rate_mhz / 1000.0 : 60.0;
-}
-
-static double get_primary_refresh_rate() {
-  return get_monitor_rate(get_primary_monitor());
-}
-
-static double get_max_refresh_rate() {
-  GdkDisplay* display = gdk_display_get_default();
-  if (!display) return 60.0;
-  double maxRate = 0.0;
-  int n = gdk_display_get_n_monitors(display);
-  for (int i = 0; i < n; i++) {
-    double rate = get_monitor_rate(gdk_display_get_monitor(display, i));
-    if (rate > maxRate) maxRate = rate;
-  }
-  return maxRate > 0 ? maxRate : 60.0;
+static double get_window_rate(RefreshRatePlugin* plugin) {
+  GObject* view = static_cast<GObject*>(g_weak_ref_get(&plugin->view));
+  if (!view) return 0;
+  GdkWindow* window = gtk_widget_get_window(GTK_WIDGET(view));
+  GdkDisplay* display = window ? gdk_window_get_display(window) : nullptr;
+  GdkMonitor* monitor = display ? gdk_display_get_monitor_at_window(display, window) : nullptr;
+  const int rate = monitor ? gdk_monitor_get_refresh_rate(monitor) : 0;
+  g_object_unref(view);
+  return rate > 0 ? rate / 1000.0 : 0;
 }
 
 static const char* get_display_server_type() {
@@ -179,36 +162,12 @@ static void handle_get_display_info(
     FlBinaryMessengerResponseHandle* response_handle,
     gpointer user_data) {
 
-  double current = get_primary_refresh_rate();
-  double max_r = get_max_refresh_rate();
-  double min_r = current; // GDK doesn't expose min; use current
-
-  // Collect unique rates
+  auto* plugin = REFRESH_RATE_PLUGIN(user_data);
+  const double current = get_window_rate(plugin);
   GdkDisplay* display = gdk_display_get_default();
-  std::set<int> seen;
-  if (display) {
-    int n = gdk_display_get_n_monitors(display);
-    for (int i = 0; i < n; i++) {
-      int rate_mhz = gdk_monitor_get_refresh_rate(gdk_display_get_monitor(display, i));
-      if (rate_mhz > 0) seen.insert((rate_mhz + 500) / 1000);
-    }
-  }
-  if (seen.empty()) seen.insert((int)current);
-
-  double rates[16];
-  int n_rates = 0;
-  for (int r : seen) {
-    rates[n_rates++] = (double)r;
-    if (n_rates >= 16) break;
-  }
-  min_r = rates[0];
-
-  gboolean is_vrr = (max_r > current + 5.0);
-  const char* display_server = get_display_server_type();
-  gint64 monitor_count = display ? gdk_display_get_n_monitors(display) : 1;
-
+  const gint64 count = display ? gdk_display_get_n_monitors(display) : 0;
   g_autoptr(GBytes) response = build_display_info_response(
-      current, max_r, min_r, rates, n_rates, is_vrr, display_server, monitor_count);
+      current, 0, 0, nullptr, 0, FALSE, get_display_server_type(), count);
   fl_binary_messenger_send_response(messenger, response_handle, response, nullptr);
 }
 
@@ -235,14 +194,21 @@ static void handle_is_supported(
 // ─── Plugin lifecycle ────────────────────────────────────────────────
 
 static void refresh_rate_plugin_dispose(GObject* object) {
+  g_weak_ref_set(&REFRESH_RATE_PLUGIN(object)->view, nullptr);
   G_OBJECT_CLASS(refresh_rate_plugin_parent_class)->dispose(object);
+}
+
+static void refresh_rate_plugin_finalize(GObject* object) {
+  g_weak_ref_clear(&REFRESH_RATE_PLUGIN(object)->view);
+  G_OBJECT_CLASS(refresh_rate_plugin_parent_class)->finalize(object);
 }
 
 static void refresh_rate_plugin_class_init(RefreshRatePluginClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = refresh_rate_plugin_dispose;
+  G_OBJECT_CLASS(klass)->finalize = refresh_rate_plugin_finalize;
 }
 
-static void refresh_rate_plugin_init(RefreshRatePlugin* self) {}
+static void refresh_rate_plugin_init(RefreshRatePlugin* self) { g_weak_ref_init(&self->view, nullptr); }
 
 void refresh_rate_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
   RefreshRatePlugin* plugin = REFRESH_RATE_PLUGIN(
@@ -250,6 +216,7 @@ void refresh_rate_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
 
   FlBinaryMessenger* messenger = fl_plugin_registrar_get_messenger(registrar);
   plugin->messenger = messenger;
+  g_weak_ref_set(&plugin->view, G_OBJECT(fl_plugin_registrar_get_view(registrar)));
 
   fl_binary_messenger_set_message_handler_on_channel(
       messenger, PIGEON_CHANNEL_PREFIX "getDisplayInfo",

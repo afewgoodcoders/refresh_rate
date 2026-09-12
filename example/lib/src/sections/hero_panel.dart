@@ -53,8 +53,10 @@ class HeroPanel extends StatelessWidget {
             children: [
               HeroMetric(
                 label: 'Current Rate',
-                value: '${info.currentRate.toStringAsFixed(1)} Hz',
-                caption: 'Observed display target',
+                value: info.nativeReportedDisplayHz == null
+                    ? 'Unknown'
+                    : '${info.nativeReportedDisplayHz!.toStringAsFixed(1)} Hz',
+                caption: 'Native display information',
                 accent: const Color(0xFF00F0FF),
                 wide: largeHero,
               ),
@@ -84,7 +86,8 @@ class HeroPanel extends StatelessWidget {
               TelemetryChip(label: 'Supported', value: supportedRatesText),
               TelemetryChip(
                 label: 'VRR',
-                value: info.isVariableRefreshRate ? 'Enabled' : 'Fixed',
+                value:
+                    info.reportedVariableRefreshRate?.toString() ?? 'Unknown',
               ),
               TelemetryChip(
                 label: 'Low Power',
