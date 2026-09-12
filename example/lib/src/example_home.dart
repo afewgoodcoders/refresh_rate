@@ -54,11 +54,12 @@ class _ExampleHomeState extends State<ExampleHome> {
     final liveStateColor = _liveStateColor(context, info);
 
     final displayInfoItems = [
-      InfoItem('Current rate', '${info.currentRate.toStringAsFixed(1)} Hz'),
-      InfoItem('Max rate', '${info.maxRate.toStringAsFixed(1)} Hz'),
-      InfoItem('Min rate', '${info.minRate.toStringAsFixed(1)} Hz'),
+      InfoItem('OS-reported rate', _hz(info.nativeReportedDisplayHz)),
+      InfoItem('Display maximum', _hz(info.displayModeMaxHz)),
+      InfoItem('Known minimum', _hz(info.minRate > 0 ? info.minRate : null)),
       InfoItem('Supported rates', supportedRatesText),
-      InfoItem('VRR / LTPO', info.isVariableRefreshRate ? 'Yes' : 'No'),
+      InfoItem('VRR / LTPO',
+          info.reportedVariableRefreshRate?.toString() ?? 'Unknown'),
       InfoItem(
         'ProMotion ready',
         RefreshRate.isProMotionReady ? 'Ready' : 'Unavailable',
@@ -71,8 +72,7 @@ class _ExampleHomeState extends State<ExampleHome> {
       InfoItem('Android API', '${info.androidApiLevel ?? 'n/a'}'),
       InfoItem('Display server', info.displayServer ?? 'n/a'),
       InfoItem('Monitor count', '${info.monitorCount}'),
-      InfoItem(
-          'Engine target', '${info.engineTargetRate.toStringAsFixed(1)} Hz'),
+      InfoItem('Engine display information', _hz(info.engineReportedDisplayHz)),
     ];
 
     return Scaffold(
@@ -206,72 +206,79 @@ class _ExampleHomeState extends State<ExampleHome> {
         label: 'ENABLE',
         accent: const Color(0xFF36FF8B),
         outlined: false,
-        onTap: () {
-          RefreshRate.enable();
-          _setStatus('Peak mode requested');
+        onTap: () async {
+          final result = await RefreshRate.enable();
+          _setStatus("${result.status.name}: ${result.backend}");
         },
       ),
       ActionSpec(
         label: 'DISABLE',
         accent: const Color(0xFFFFBA20),
         outlined: true,
-        onTap: () {
-          RefreshRate.disable();
-          _setStatus('Requests cleared');
+        onTap: () async {
+          final result = await RefreshRate.disable();
+          _setStatus("${result.status.name}: ${result.backend}");
         },
       ),
       ActionSpec(
         label: 'PREFER MAX',
         accent: const Color(0xFF00F0FF),
         outlined: true,
-        onTap: () {
-          RefreshRate.preferMax();
-          _setStatus('Maximum refresh preferred');
+        onTap: () async {
+          final result = await RefreshRate.preferMax();
+          _setStatus("${result.status.name}: ${result.backend}");
         },
       ),
       ActionSpec(
         label: 'DEFAULT',
         accent: const Color(0xFFB9CACB),
         outlined: true,
-        onTap: () {
-          RefreshRate.preferDefault();
-          _setStatus('OS-managed default restored');
+        onTap: () async {
+          final result = await RefreshRate.preferDefault();
+          _setStatus("${result.status.name}: ${result.backend}");
         },
       ),
       ActionSpec(
         label: 'MATCH 24FPS',
         accent: const Color(0xFF00F0FF),
         outlined: false,
-        onTap: () {
-          RefreshRate.matchContent(24.0);
-          _setStatus('Matched content to 24fps cadence');
+        onTap: () async {
+          final result = await RefreshRate.matchContent(24.0);
+          _setStatus(
+              "${result.status.name}: ${result.backend}${result.message == null ? '' : ' — ${result.message}'}");
         },
       ),
       ActionSpec(
         label: 'BOOST 3S',
         accent: const Color(0xFFFFBA20),
         outlined: false,
-        onTap: () {
-          RefreshRate.boost(const Duration(seconds: 3));
-          _setStatus('Temporary boost active for 3 seconds');
+        onTap: () async {
+          final result = await RefreshRate.boost(const Duration(seconds: 3));
+          _setStatus(
+              "${result.status.name}: ${result.backend}${result.message == null ? '' : ' — ${result.message}'}");
         },
       ),
       ActionSpec(
         label: 'CATEGORY HIGH',
         accent: const Color(0xFF36FF8B),
         outlined: true,
-        onTap: () {
-          RefreshRate.category(RateCategory.high);
-          _setStatus('Android category set to high');
+        onTap: () async {
+          final result = await RefreshRate.category(RateCategory.high);
+          _setStatus(
+              "${result.status.name}: ${result.backend}${result.message == null ? '' : ' — ${result.message}'}");
         },
       ),
       ActionSpec(
         label: 'TOUCH BOOST',
         accent: const Color(0xFF00F0FF),
         outlined: true,
-        onTap: () {
-          RefreshRate.setTouchBoost(true);
-          _setStatus('Touch boost enabled');
+        onTap: () async {
+          try {
+            await RefreshRate.setTouchBoost(true);
+            _setStatus('Touch hint submitted');
+          } catch (error) {
+            _setStatus('Touch hint unavailable: $error');
+          }
         },
       ),
     ];
@@ -392,15 +399,24 @@ class _ExampleHomeState extends State<ExampleHome> {
       InfoItem('Verdict', report.verdict.name),
       InfoItem('Bottleneck', report.likelyBottleneck.name),
       InfoItem('Avg FPS', report.avgFps.toStringAsFixed(1)),
-      InfoItem('1% Low', report.onePercentLowFps.toStringAsFixed(1)),
       InfoItem(
-          'Missed frames', '${report.missedFramePercent.toStringAsFixed(1)}%'),
+          '1% Low',
+          report.intervalCount >= 100
+              ? report.onePercentLowFps.toStringAsFixed(1)
+              : 'Insufficient data'),
+      InfoItem('Phase overrun %',
+          report.phaseOverrunPercent?.toStringAsFixed(1) ?? 'Unknown'),
       InfoItem('Valid duration', '${report.validDuration.inMilliseconds} ms'),
       InfoItem('Excluded', '${report.excludedDuration.inMilliseconds} ms'),
     ];
   }
 
-  void _setStatus(String value) => setState(() => _status = value);
+  void _setStatus(String value) {
+    if (mounted) setState(() => _status = value);
+  }
+
+  String _hz(double? rate) =>
+      rate == null ? 'Unknown' : '${rate.toStringAsFixed(1)} Hz';
 
   String _supportedRatesText(DisplayInfo info) {
     if (info.supportedRates.isEmpty) return 'n/a';
