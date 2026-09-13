@@ -101,21 +101,27 @@ void main() {
       () async {
     var writes = 0;
     var fail = false;
+    var backend = 'windowPreference';
     final controller = RateController((preference) async {
       writes++;
       return RateRequestResult(
           status: fail ? RequestStatus.failed : RequestStatus.submitted,
           preference: preference,
-          backend: 'test',
+          backend: backend,
           scope: 'surface');
     });
     final one = controller.acquire(RatePreference.content(24));
     await one.ready;
+    backend = 'flutterSurface';
     final two = controller.acquire(RatePreference.content(24));
-    expect((await two.ready).reused, true);
+    final reused = await two.ready;
+    expect(reused.reused, true);
+    expect(reused.backend, 'windowPreference');
     await one.release();
     expect(writes, 1);
-    expect((await controller.reconcile(force: true)).reused, false);
+    final refreshed = await controller.reconcile(force: true);
+    expect(refreshed.reused, false);
+    expect(refreshed.backend, 'flutterSurface');
     expect(writes, 2);
     fail = true;
     await controller.reconcile(force: true);

@@ -21,9 +21,18 @@ rotation = run('shell', 'settings', 'get', 'system', 'user_rotation')
 # Android 11 calls this command set-user-rotation; Android 12 renamed it.
 api_level = int(run('shell', 'getprop', 'ro.build.version.sdk'))
 rotation_command = 'set-user-rotation' if api_level <= 30 else 'user-rotation'
-# Read the setting directly; the Android 11 command has no query mode.
-rotation_mode = ('free' if run('shell', 'settings', 'get', 'system',
-                            'accelerometer_rotation') == '1' else 'lock')
+if api_level <= 30:
+    # Android 11 has no window-manager query mode.
+    rotation_mode = ('free' if run('shell', 'settings', 'get', 'system',
+                                'accelerometer_rotation') == '1' else 'lock')
+else:
+    # Query the active policy: persisted settings can lag a preceding shell
+    # rotation change, especially when lifecycle runs follow one another.
+    saved_rotation = run('shell', 'wm', rotation_command).split()
+    rotation_mode = saved_rotation[0]
+    if rotation_mode == 'lock':
+        rotation = saved_rotation[1]
+print(f'Rotation fixture: preserve {rotation_mode} {rotation}.', flush=True)
 process = None
 timeout = None
 errors = []

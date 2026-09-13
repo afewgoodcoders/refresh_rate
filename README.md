@@ -84,7 +84,11 @@ final result = await lease.ready;
 await lease.release(); // idempotent; does not clear another owner's preference
 ```
 
-Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. Unchanged successful preferences are reused without a native write (`result.reused`); failures remain retryable. Native attachment/recreation reapplies the active preference to its new target, including ordinary Activity replacement with a cached Flutter engine. Detachment clears the old native target; engine disposal clears the retained preference. Custom backends can use `controller.reconcile(force: true)` when their target changes. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
+Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. Unchanged successful preferences are reused without a native write (`result.reused`); failures remain retryable.
+
+A result is a submission receipt: its backend and scope describe the original Dart-initiated submission. Native lifecycle reapplication can use a different backend; read `(await RefreshRate.diagnostics()).nativeMetadata` for the latest native request, target generation and submission count.
+
+Native attachment/recreation reapplies the active preference to its new target, including ordinary Activity replacement with a cached Flutter engine. Detachment clears the old native target; engine disposal clears the retained preference. Custom backends can use `controller.reconcile(force: true)` when their target changes. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
 
 ## Platform details
 

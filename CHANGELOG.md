@@ -14,6 +14,7 @@
 - Added configuration diagnostics, bounded diagnostic bundles, filtering/redaction and export-size limits. Expanded JSON/CSV reports and added Markdown/NDJSON exports, metric definitions, comparison checks and benchmark thresholds.
 - Restored numeric workload targets and budgets in the overlay, alongside requested content FPS, display Hz and Flutter phase overruns. Request decisions update the overlay even without display events; updates remain throttled and event-driven.
 - Moved all native operations to generated Pigeon messages, including Linux GObject bindings. Added regeneration checks and native/browser integration jobs to CI.
+- Lifecycle integration checks now wait for fresh native surface restoration after resume and rotation. Preserved the active Android rotation policy in the host test fixture. Clarified that reused request results describe the original submission.
 - Fixed integration-test coordination on CI: streaming Android host markers, API 30 rotation handling, separate desktop launches and explicit Chrome/WebDriver binary pairing.
 - Added a controlled system-default versus requested-high example, Android OS lifecycle/Battery Saver tests and separate paired overlay-overhead captures.
 

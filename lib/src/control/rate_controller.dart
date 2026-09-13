@@ -129,7 +129,9 @@ enum RequestStatus {
   superseded,
 }
 
-/// Native submission result with backend and scope evidence.
+/// Receipt for a Dart-initiated submission, with its backend and scope.
+/// Native lifecycle reapplication does not update an earlier receipt. Read fresh
+/// native diagnostics to inspect the latest backend and target evidence.
 class RateRequestResult {
   /// Creates a [RateRequestResult] with the supplied configuration.
   const RateRequestResult(
@@ -146,13 +148,16 @@ class RateRequestResult {
   /// The preference associated with this owner or submission.
   final RatePreference preference;
 
-  /// Actual native mechanism used, or unavailable.
+  /// Native mechanism used by the original submission, or unavailable.
+  /// A reused result retains that mechanism even if native lifecycle callbacks
+  /// have since reapplied the preference through another backend.
   final String backend;
 
   /// Window, surface, engine or observer scope of this value.
   final String scope;
 
-  /// An unchanged successful preference was reused without a native write.
+  /// An unchanged successful preference was reused without a new Dart-initiated
+  /// native write. Backend and scope describe the original submission.
   final bool reused;
 
   /// Optional explanation of unsupported state or failure.

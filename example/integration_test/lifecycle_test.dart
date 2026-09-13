@@ -28,24 +28,68 @@ void main() {
       expect(condition(), true);
     }
 
+    Future<Map<Object?, Object?>> waitForNativeHigh(
+        {Map<Object?, Object?>? after}) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 25));
+      Map<Object?, Object?> native = {};
+      Map<Object?, Object?>? ready;
+      while (DateTime.now().isBefore(deadline)) {
+        native = (await RefreshRate.diagnostics()).nativeMetadata;
+        final last = native['lastNativeRequest'] as Map?;
+        final generation = native['targetGeneration'] as num?;
+        final submissions = native['submissionCount'] as num?;
+        final targetReapplied = after == null ||
+            (generation == after['targetGeneration'] ||
+                (submissions != null &&
+                    submissions > (after['submissionCount'] as num)));
+        if (binding.lifecycleState == AppLifecycleState.resumed &&
+            session.state == SessionState.running &&
+            RefreshRate.requestedPreference.kind == PreferenceKind.high &&
+            native['activityAttached'] == true &&
+            native['surfaceAvailable'] == true &&
+            generation != null &&
+            submissions != null &&
+            last?['status'] == 'submitted' &&
+            last?['backend'] == 'flutterSurface' &&
+            (last?['preference'] as Map?)?['kind'] == 'high' &&
+            targetReapplied) {
+          // Rotation may briefly deactivate the scope after Flutter's size
+          // changes. Require resumed ownership and an unchanged native target
+          // and submission across consecutive reads before asserting recovery.
+          if (ready?['targetGeneration'] == generation &&
+              ready?['submissionCount'] == submissions) {
+            return native;
+          }
+          ready = native;
+        } else {
+          ready = null;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      fail('Native high preference was not restored: '
+          'before=$after; latest=$native; lifecycle=${binding.lifecycleState}; '
+          'preference=${RefreshRate.requestedPreference.kind}; '
+          'session=${session.state}');
+    }
+
     await waitFor(
         () => RefreshRate.requestedPreference.kind == PreferenceKind.high);
+    final beforeBackground = await waitForNativeHigh();
     debugPrint('REFRESH_RATE_HOST_BACKGROUND');
     await waitFor(() => states.contains(AppLifecycleState.paused));
     expect(session.state, SessionState.interrupted);
     expect(RefreshRate.requestedPreference.kind, PreferenceKind.system);
     await waitFor(() => states.last == AppLifecycleState.resumed);
     await waitFor(() => session.state == SessionState.running);
-    expect(RefreshRate.requestedPreference.kind, PreferenceKind.high);
-    final beforeRotation = (await RefreshRate.diagnostics()).nativeMetadata;
+    await waitFor(
+        () => RefreshRate.requestedPreference.kind == PreferenceKind.high);
+    final beforeRotation = await waitForNativeHigh(after: beforeBackground);
     final size = tester.view.physicalSize;
     debugPrint('REFRESH_RATE_HOST_ROTATE');
     await waitFor(() => tester.view.physicalSize != size);
-    final request =
-        await RefreshRate.controller.reconcile(reason: 'rotationTest');
-    expect(request.status, RequestStatus.submitted);
-    expect(request.backend, 'flutterSurface');
-    final native = (await RefreshRate.diagnostics()).nativeMetadata;
+    // Flutter metrics may arrive before native surface callbacks. Observe the
+    // native vote without submitting another request that could mask lost state.
+    final native = await waitForNativeHigh(after: beforeRotation);
     expect(native['activityAttached'], true);
     expect(native['surfaceAvailable'], true);
     final lastNative = native['lastNativeRequest'] as Map;
@@ -56,6 +100,16 @@ void main() {
       expect(native['submissionCount'] as num,
           greaterThan(beforeRotation['submissionCount'] as num));
     }
+    expect(RefreshRate.requestedPreference.kind, PreferenceKind.high);
+    // A reused result describes the original Dart submission, whose backend may
+    // predate native reapplication. Current backend evidence comes from above.
+    final request =
+        await RefreshRate.controller.reconcile(reason: 'rotationTest');
+    expect(request.status, RequestStatus.submitted);
+    expect(request.preference.kind, PreferenceKind.high);
+    expect(request.reused, true);
+    expect((await RefreshRate.diagnostics()).nativeMetadata['submissionCount'],
+        native['submissionCount']);
     debugPrint('LIFECYCLE_NATIVE: $native');
     final report = await session.end();
     expect(report.exclusionReasons[ExclusionReason.appBackgrounded],
