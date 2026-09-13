@@ -1,8 +1,46 @@
 # refresh_rate
 
-Request appropriate refresh rates and measure **Flutter frame production** with explicit source and coverage information.
+[![pub package](https://img.shields.io/pub/v/refresh_rate.svg)](https://pub.dev/packages/refresh_rate)
+[![pub points](https://img.shields.io/pub/points/refresh_rate)](https://pub.dev/packages/refresh_rate/score)
+[![likes](https://img.shields.io/pub/likes/refresh_rate)](https://pub.dev/packages/refresh_rate/score)
+[![License: BSD-3](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/afewgoodcoders/refresh_rate/blob/main/LICENSE)
 
-Rate requests are preferences, not guarantees. Native display information, Flutter frame cadence, and display-link/browser callback cadence are separate measurements. Physical presentation FPS is unavailable unless a qualified presentation source is added.
+**Request high refresh rates in one line of Flutter.**
+
+Your Flutter app can run at 60 Hz on a 120 Hz phone. `refresh_rate` lets you request a higher rate on Android — and gives you diagnostics, benchmarks, and a live overlay to see how your app performs across platforms.
+
+```dart
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    await RefreshRate.enable(); // that's it — request high refresh on Android
+  });
+}
+```
+
+> **Why does this happen?** A high-refresh display doesn't mean every app runs at its maximum rate. Device scheduling can leave Flutter apps at 60 Hz; see [Flutter #160952](https://github.com/flutter/flutter/issues/160952). This package submits a refresh preference on Android. The OS still chooses the rate, taking device settings, power and thermal conditions into account.
+
+Built on [pigeon](https://pub.dev/packages/pigeon) — typed Dart and native APIs.
+
+---
+
+## Platform support
+
+| Platform | Control | Query | Overlay | Benchmark |
+|:---------|:-------:|:-----:|:-------:|:---------:|
+| **Android** 6+ (API 23) | ✅ | ✅ | ✅ | ✅ |
+| **iOS** | — | ✅ | ✅ | ✅ |
+| **macOS** | — | ✅ | ✅ | ✅ |
+| **Windows** | — | ✅ | ✅ | ✅ |
+| **Linux** | — | ✅ | ✅ | ✅ |
+| **Web** | — | ✅ * | ✅ | ✅ |
+
+Control requests are preferences, not guaranteed frame rates. iOS and macOS support queries and telemetry; Flutter-engine refresh control is unsupported. For ProMotion configuration, see [iOS setup](#ios-setup).
+
+\* Web queries measure browser callback cadence. Overlays and benchmarks measure Flutter frame production, not physical presentation FPS. See [platform details](#platform-details) for available native signals and controls.
+
+---
 
 ## Installation
 
@@ -48,7 +86,7 @@ await lease.release(); // idempotent; does not clear another owner's preference
 
 Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. Unchanged successful preferences are reused without a native write (`result.reused`); failures remain retryable. Native attachment/recreation reapplies the active preference to its new target, including ordinary Activity replacement with a cached Flutter engine. Detachment clears the old native target; engine disposal clears the retained preference. Custom backends can use `controller.reconcile(force: true)` when their target changes. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
 
-## Platform support
+## Platform details
 
 | Platform | Queries | Control |
 |---|---|---|
@@ -64,6 +102,8 @@ Higher priority wins, with newer requests breaking ties. Temporary boosts use ex
 Sessions, reports, stutter analysis, diagnostic exports use shared Dart code across all six platforms. Native health data and scheduling controls are available only where the backend supports them.
 
 Android API 36 support uses `Display.hasArrSupport()`, display-defined suggested normal/high rates, and `FRAME_RATE_COMPATIBILITY_AT_LEAST`. High preferences use the display-suggested high rate when available. Surface lookup is matched to the registering Flutter engine; window fallback is refused if it would affect a different engine. Control preserves resolution rather than silently selecting a different-resolution mode. Supported SDK paths still require physical-device qualification for OEM, composition, and lifecycle behavior.
+
+### iOS setup
 
 For eligible iOS ProMotion devices, add this Boolean inside the application's `ios/Runner/Info.plist` dictionary:
 
