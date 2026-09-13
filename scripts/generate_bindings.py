@@ -27,6 +27,8 @@ subprocess.run([sys.executable, 'scripts/check_apple_sources.py', '--sync'], cwd
 for name in outputs:
     path = root / name
     path.write_text('\n'.join(line.rstrip() for line in path.read_text().splitlines()) + '\n')
+# Pigeon may leave Dart output unformatted; pub.dev scores generated code too.
+subprocess.run(['dart', 'format', outputs[0]], cwd=root, check=True)
 changed = [name for name in outputs if before[name] != (root / name).read_bytes()]
 if '--check' in sys.argv and changed:
     raise SystemExit('Generated bindings differ: ' + ', '.join(changed))

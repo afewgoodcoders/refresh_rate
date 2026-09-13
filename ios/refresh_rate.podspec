@@ -7,7 +7,7 @@ Cross-platform Flutter plugin to query and control display refresh rates.
 Reports source-qualified display capabilities and Flutter frame timings.
 System scheduling remains in control when engine control is unsupported.
                        DESC
-  s.homepage         = 'https://www.afewgoodcoders.com'
+  s.homepage         = 'https://afewgoodcoders.com'
   s.license          = { :file => '../LICENSE' }
   s.author           = 'A Few Good Coders'
   s.source           = { :path => '.' }

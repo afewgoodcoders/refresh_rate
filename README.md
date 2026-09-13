@@ -339,7 +339,7 @@ python3 scripts/test_android_lifecycle.py --device <android-device-id>
 python3 scripts/test_android_power.py --device <android-device-id>
 ```
 
-The host scripts select the streaming `expanded` reporter explicitly, including on CI, so native actions occur while the Dart test is waiting for them. Rotation mode is queried through Settings; changes and restoration use `set-user-rotation` on API 30 and `user-rotation` on newer Android versions.
+The host scripts select the streaming `expanded` reporter explicitly, including on CI, so native actions occur while the Dart test is waiting for them. Rotation mode is queried through Settings on API 30 and directly from the window manager on newer Android versions; changes and restoration use `set-user-rotation` on API 30 and `user-rotation` on newer versions.
 
 The power test simulates an unplugged battery at 50%, waits for PowerManager to observe that state, enables Battery Saver and checks the native event when Saver is disabled. Thermal constraints still take precedence. The host scripts restore the device settings they change. If an OEM sleeps during installation with Battery Saver enabled, add `--after-launch`: the host enables it once the app is visible, before the automatic controller is created, while leaving the facade cache uninitialized.
 
@@ -349,7 +349,7 @@ For paired overlay-off/on captures on a physical device, run from `example/`:
 flutter drive --profile --dart-define=REQUIRE_PROFILE=true --driver=test_driver/refresh_rate.dart --target=integration_test/overlay_overhead_test.dart -d <device-id>
 ```
 
-Unit tests cover deterministic metric and ownership edge cases. Integration tests use the registered plugin and actual Flutter frame callbacks. CI includes native integration jobs, browser execution and `python3 scripts/generate_bindings.py --check` to check all generated Pigeon bindings, including Linux GObject and both Apple source layouts.
+Unit tests cover deterministic metric and ownership edge cases. Integration tests use the registered plugin and actual Flutter frame callbacks. Run `python3 scripts/generate_bindings.py --check` to check all generated Pigeon bindings, including Linux GObject and both Apple source layouts.
 
 ## Upgrading from 1.0.2
 

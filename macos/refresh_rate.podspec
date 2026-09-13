@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.description      = <<-DESC
 Cross-platform Flutter plugin to query and control display refresh rates.
                        DESC
-  s.homepage         = 'https://www.afewgoodcoders.com'
+  s.homepage         = 'https://afewgoodcoders.com'
   s.license          = { :file => '../LICENSE' }
   s.author           = 'A Few Good Coders'
   s.source           = { :path => '.' }
