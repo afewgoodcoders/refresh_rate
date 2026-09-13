@@ -5,6 +5,7 @@
 - Corrected FPS lows to use frame intervals and kept benchmark aggregates for the full session. Added separate phase overruns, pipeline latency, cadence gaps, stutter episodes and recovery evidence.
 - Added explicit workload budgets, pause/resume, timestamped tags and markers, monotonic session duration and complete-boundary checks. Power and thermal transitions remain visible in session segments.
 - Added awaitable refresh results, independently owned requests, timed boosts, optional scopes/activity policies and fractional content preferences. Unchanged successful requests no longer repeat native writes; failed requests can retry.
+- Fixed native refresh preferences being lost when a cached Flutter engine attaches to a replacement Android Activity. The old target is cleared before the active preference is reapplied.
 - Fixed animation boosts surviving `AnimationController.stop()`. The adapter supports reuse and returns an explicit disposer.
 - Automatic policies now read initial device state and capabilities before requesting a rate. Failed initialization preserves system scheduling. Added policy shadow mode.
 - Added Android surface voting, API 35 categories and API 36 ARR/at-least support, using suggested high rates where available. Surface requests match the registering engine and reapply after attachment/recreation. Touch-boost reset restores the captured native setting.
@@ -13,6 +14,7 @@
 - Added configuration diagnostics, bounded diagnostic bundles, filtering/redaction and export-size limits. Expanded JSON/CSV reports and added Markdown/NDJSON exports, metric definitions, comparison checks and benchmark thresholds.
 - Restored numeric workload targets and budgets in the overlay, alongside requested content FPS, display Hz and Flutter phase overruns. Request decisions update the overlay even without display events; updates remain throttled and event-driven.
 - Moved all native operations to generated Pigeon messages, including Linux GObject bindings. Added regeneration checks and native/browser integration jobs to CI.
+- Fixed integration-test coordination on CI: streaming Android host markers, API 30 rotation handling, separate desktop launches and explicit Chrome/WebDriver binary pairing.
 - Added a controlled system-default versus requested-high example, Android OS lifecycle/Battery Saver tests and separate paired overlay-overhead captures.
 
 **Breaking changes:** Existing controls now return futures/results, resets preserve independently owned requests, `boostDuring()` requires disposal, `observedAvgHz` is nullable, session states include `finalizing`, and report schema version 2 uses revised metric definitions. Unknown display values no longer assume 60 Hz. See [Upgrading from 1.0.2](README.md#upgrading-from-102).

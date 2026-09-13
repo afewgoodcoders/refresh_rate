@@ -24,12 +24,14 @@ The examples below belong in your application's initialization, widget lifecycle
 ```dart
 WidgetsFlutterBinding.ensureInitialized();
 
-final result = await RefreshRate.preferMax();
+final result = await RefreshRate.enable();
 print('${result.status.name}: ${result.backend}');
 // submitted means the named backend accepted the request, not that 120 Hz was reached.
 
 await RefreshRate.preferDefault();
 ```
+
+`enable()` is the simple high-refresh preference entry point; `preferMax()` is equivalent. Call it after the app attaches its view, as shown in the runnable example.
 
 Use independently owned leases when multiple parts of the app need preferences:
 
@@ -44,7 +46,7 @@ final result = await lease.ready;
 await lease.release(); // idempotent; does not clear another owner's preference
 ```
 
-Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. Unchanged successful preferences are reused without a native write (`result.reused`); failures remain retryable. Native attachment/recreation reapplies the active preference to its new target. Custom backends can use `controller.reconcile(force: true)` when their target changes. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
+Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. Unchanged successful preferences are reused without a native write (`result.reused`); failures remain retryable. Native attachment/recreation reapplies the active preference to its new target, including ordinary Activity replacement with a cached Flutter engine. Detachment clears the old native target; engine disposal clears the retained preference. Custom backends can use `controller.reconcile(force: true)` when their target changes. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
 
 ## Platform support
 
@@ -280,8 +282,11 @@ The example's **COMPARE DEFAULT / HIGH** action runs the same animation with the
 From `example/`, run the functional suite against a connected target:
 
 ```sh
-flutter test integration_test/refresh_rate_test.dart integration_test/example_workflow_test.dart -d <device-id>
+flutter test integration_test/refresh_rate_test.dart -d <device-id>
+flutter test integration_test/example_workflow_test.dart -d <device-id>
 ```
+
+Run each integration file in a separate Flutter invocation so the desktop runner starts a fresh debug connection. For Android cached-engine Activity replacement, run `flutter test integration_test/retained_engine_test.dart -d <android-device-id> --reporter expanded` from `example/`. Its Activity harness is included only in debug builds.
 
 From the package root, exercise actual Android Home/resume/rotation transitions:
 
@@ -290,7 +295,9 @@ python3 scripts/test_android_lifecycle.py --device <android-device-id>
 python3 scripts/test_android_power.py --device <android-device-id>
 ```
 
-The power test starts with Battery Saver enabled and checks the native event when it is disabled. Thermal constraints still take precedence. The host scripts restore the device settings they change. If an OEM sleeps during installation with Battery Saver enabled, add `--after-launch`: the host enables it once the app is visible, before the automatic controller is created, while leaving the facade cache uninitialized.
+The host scripts select the streaming `expanded` reporter explicitly, including on CI, so native actions occur while the Dart test is waiting for them. Rotation mode is queried through Settings; changes and restoration use `set-user-rotation` on API 30 and `user-rotation` on newer Android versions.
+
+The power test simulates an unplugged battery at 50%, waits for PowerManager to observe that state, enables Battery Saver and checks the native event when Saver is disabled. Thermal constraints still take precedence. The host scripts restore the device settings they change. If an OEM sleeps during installation with Battery Saver enabled, add `--after-launch`: the host enables it once the app is visible, before the automatic controller is created, while leaving the facade cache uninitialized.
 
 For paired overlay-off/on captures on a physical device, run from `example/`:
 
@@ -315,6 +322,10 @@ Version 2.0.0 includes API and measurement changes:
 - `isProMotionReady` is deprecated. Use `isProMotionConfigured` for the plist setting and nullable `supportsHighRefreshRate` for reported display capability. Neither indicates a guaranteed engine cadence.
 
 See the [2.0.0 changelog](CHANGELOG.md#200) for the release changes.
+
+## Design decisions for 2.0
+
+This README is the maintained design and support reference for the package. Version 2.0 keeps four capabilities: refresh requests, diagnostics, overlays and benchmark sessions. `enable()` requests a high rate; it cannot guarantee a peak panel or engine rate. Optional scopes and policies own preferences on a shared surface/window, not independent subtree refresh rates. Apple engine control is unsupported. Scoring uses explicit workload budgets, and thermal/power degradation remains visible in session segments. Broader profiling, quality controls and router integrations are deferred.
 
 ## Current limits
 

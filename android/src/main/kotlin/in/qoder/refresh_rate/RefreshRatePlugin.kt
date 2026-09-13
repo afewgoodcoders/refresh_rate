@@ -91,7 +91,10 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
     }
     override fun onDetachedFromActivityForConfigChanges() { detachActivity() }
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { onAttachedToActivity(binding) }
-    override fun onDetachedFromActivity() { detachActivity(); pending = null }
+    // The Dart owners belong to the engine, which may outlive this Activity.
+    // Clear the old target now; onAttachedToActivity reapplies to its replacement.
+    // onDetachedFromEngine is the point that discards the retained preference.
+    override fun onDetachedFromActivity() { detachActivity() }
     private fun detachActivity() {
         targetGeneration++; restoreTouchBoost()
         clearOwnedPreference()

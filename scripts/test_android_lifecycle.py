@@ -18,7 +18,12 @@ def run(*command):
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.strip()
 
 rotation = run('shell', 'settings', 'get', 'system', 'user_rotation')
-rotation_mode = run('shell', 'wm', 'user-rotation').split()[0]
+# Android 11 calls this command set-user-rotation; Android 12 renamed it.
+api_level = int(run('shell', 'getprop', 'ro.build.version.sdk'))
+rotation_command = 'set-user-rotation' if api_level <= 30 else 'user-rotation'
+# Read the setting directly; the Android 11 command has no query mode.
+rotation_mode = ('free' if run('shell', 'settings', 'get', 'system',
+                            'accelerometer_rotation') == '1' else 'lock')
 process = None
 timeout = None
 errors = []
@@ -37,7 +42,7 @@ def resume():
 
 try:
     process = subprocess.Popen(['flutter', 'test', 'integration_test/lifecycle_test.dart',
-                                '-d', args.device], cwd=root / 'example', text=True,
+                                '-d', args.device, '--reporter', 'expanded'], cwd=root / 'example', text=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     timeout = threading.Timer(180, process.terminate)
     timeout.daemon = True
@@ -55,7 +60,7 @@ try:
             if viewport is None:
                 raise RuntimeError('Cannot determine actual display rotation')
             target = (int(viewport.group(1)) + 1) % 4
-            run('shell', 'wm', 'user-rotation', 'lock', str(target))
+            run('shell', 'wm', rotation_command, 'lock', str(target))
     code = process.wait()
     timeout.cancel()
     for worker in workers:
@@ -69,6 +74,6 @@ finally:
     if process is not None and process.poll() is None:
         process.terminate()
         process.wait(timeout=10)
-    run('shell', 'wm', 'user-rotation', 'lock', rotation if rotation != 'null' else '0')
+    run('shell', 'wm', rotation_command, 'lock', rotation if rotation != 'null' else '0')
     if rotation_mode == 'free':
-        run('shell', 'wm', 'user-rotation', 'free')
+        run('shell', 'wm', rotation_command, 'free')
