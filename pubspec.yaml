@@ -2,10 +2,10 @@ name: refresh_rate
 description: >-
   Request display refresh rates, measure Flutter frame cadence and phase
   timings, and export source-qualified benchmark reports and telemetry.
-version: 1.0.2
+version: 2.0.0-dev.1
 homepage: https://qoder.in/resources/refresh_rate
-repository: https://github.com/qoder-official/refresh_rate
-issue_tracker: https://github.com/qoder-official/refresh_rate/issues
+repository: https://github.com/afewgoodcoders/refresh_rate
+issue_tracker: https://github.com/afewgoodcoders/refresh_rate/issues
 documentation: https://pub.dev/documentation/refresh_rate/latest/
 
 topics:

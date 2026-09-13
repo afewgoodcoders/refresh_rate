@@ -2,7 +2,7 @@
 
 Request appropriate refresh rates and measure **Flutter frame production** with explicit source and coverage information.
 
-This checkout contains the next major API revision. Rate requests are preferences, not guarantees. Native display information, Flutter frame cadence, and display-link/browser callback cadence are separate measurements. Physical presentation FPS is unavailable unless a qualified presentation source is added.
+This checkout prepares the `2.0.0-dev.1` development prerelease. Rate requests are preferences, not guarantees. Native display information, Flutter frame cadence, and display-link/browser callback cadence are separate measurements. Physical presentation FPS is unavailable unless a qualified presentation source is added.
 
 ## Request a preference
 
@@ -176,6 +176,6 @@ JSON and CSV remain available with report schema version 2. Legacy `missedFrameP
 
 ## Validation and migration
 
-See [migration notes](docs/migration.md), [implementation status](docs/implementation-status.md), and the [audit checklist](docs/improvement-plan.md).
+See [migration notes](doc/migration.md), [implementation status](doc/implementation-status.md), and the [audit checklist](doc/improvement-plan.md).
 
 Native View/HWUI counters, MetricKit aggregates and callback cadence are not automatically Flutter presentation measurements. JankStats, MetricKit and native player-surface integrations are not bundled in this revision. A qualified integration must establish its coverage before exposing presentation metrics.

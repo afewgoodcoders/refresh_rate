@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 13 September 2026, against baseline `96b9861` (1.0.2). This implementation targets the next major revision; no package release has been published. The source audit inventory is in [improvement-plan.md](improvement-plan.md); breaking changes are in [migration.md](migration.md).
+Updated 13 September 2026, against baseline `96b9861` (1.0.2). This implementation prepares `2.0.0-dev.1`; no package release has been published. The source audit inventory is in [improvement-plan.md](improvement-plan.md); breaking changes are in [migration.md](migration.md).
 
 ## Implemented
 
@@ -33,12 +33,18 @@ Updated 13 September 2026, against baseline `96b9861` (1.0.2). This implementati
 
 Builds used the locally installed Flutter SDK. Flutter automatically migrated temporary example host settings for its current deployment requirements during builds; those unrelated host/lockfile edits were reverted. Native compilation validates integration with that SDK, not on-device frame-rate behavior or the declared minimum Flutter version.
 
+## Remote CI and prerelease preparation
+
+[Run 34726106763](https://github.com/afewgoodcoders/refresh_rate/actions/runs/34726106763), at `bcc4bf2`, passed all six example builds: Android, iOS simulator, macOS, Windows, Linux and web. The stable Dart job failed during Flutter setup because the workflow passed `stable` as a version number; the minimum-version job was cancelled by the matrix's fail-fast behavior. Neither result establishes a Dart test failure.
+
+The workflow now supplies an explicit version for the minimum SDK and an empty version for the stable channel, disables fail-fast for that matrix, and adds a stable-channel publishing dry run. Documentation follows Pub's singular `doc/` convention; release metadata uses `2.0.0-dev.1` and the current repository owner. Analyzer exclusions match the current Flutter tool’s generated configuration so dependency resolution does not leave publishable tracked files modified. Local preparation checks passed all 37 package tests, static analysis, Apple source parity, and parsing both prerelease podspecs. These workflow fixes still need a new remote run after the next push.
+
 ## Partial items and remaining work
 
 | Inventory | Remaining scope / acceptance gate |
 |---|---|
 | C4/C5/C8 | Qualify request restoration with external native owners, touch-boost ownership, activity/engine recreation, surface replacement and platform-view composition on devices. Surface lifecycle reapplication exists, but only physical scenarios can validate OEM behavior. |
-| D4/D5/R5 | Windows/Linux source changes and CI jobs are present; builds and monitor-move runtime checks were not run on this Mac. Execute the CI matrix, including minimum Flutter 3.24, before release. |
+| D4/D5/R5 | Windows/Linux example builds passed remotely; monitor-move runtime checks remain open. Complete the repaired Dart matrix, including minimum Flutter 3.24, before release. |
 | D7 | Full native multi-window control/enumeration and per-view Flutter frame attribution are not implemented. Public Flutter timing does not establish universal per-view presentation attribution. |
 | A2/A5 | Idle hysteresis exists. A separately configurable minimum-residence/transition-frequency governor, measured observer overhead, device policy comparisons and sustained thermal/energy validation remain open. No energy savings are claimed. |
 | T1 | Core telemetry has no network destination and exports only timing samples. Application-specific tag redaction/export policy and integrations with production monitoring services remain application responsibilities. |
@@ -46,7 +52,7 @@ Builds used the locally installed Flutter SDK. Flutter automatically migrated te
 | T3 | JankStats/FrameMetrics, MetricKit and presentation/Perfetto/Instruments adapters are not bundled. Establish actual Flutter-surface coverage before adding those metrics; physical presented FPS remains unavailable. |
 | T4 | Generic content-state adapter is present; third-party video plugins' actual player-surface ownership and pacing integrations remain open. |
 | R3 | SwiftPM source paths/parity are repaired; a consuming SwiftPM build still needs qualification. CocoaPods builds passed. |
-| R4/R5 | Browser visibility/runtime automation, platform-native lifecycle tests and broad SDK/device matrix execution remain open. The added CI workflow has not run remotely. |
-| R7 | Schema and migration changes are documented as a major revision; choose the release version after qualification. `pubspec.yaml` is intentionally still the baseline version and must not be published unchanged. |
+| R4/R5 | Browser visibility/runtime automation, platform-native lifecycle tests and broad SDK/device matrix execution remain open. Remote native builds passed; the repaired Dart workflow awaits rerun. |
+| R7 | `2.0.0-dev.1` is prepared as a development prerelease with schema and migration changes. Stable `2.0.0` remains subject to device and SDK qualification. No package has been published. |
 
 The referenced chat's final audit was truncated by the conversation reader. This implementation does not claim to cover recommendations in text that could not be retrieved.

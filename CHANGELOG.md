@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — next major revision
+## 2.0.0-dev.1
+
+Development prerelease with breaking API and behavior changes. Device qualification remains in progress.
 
 - Separate Flutter cadence, phase overruns, pipeline latency and native observations; correct FPS lows and preserve whole-session statistics.
 - Add event-time session boundaries, lifecycle exclusions, tags, markers, workload coverage, versioned exports and evidence-aware CI comparisons.
@@ -8,7 +10,7 @@
 - Implement qualified Android surface votes and API 36 support; remove default Apple display-link interception and report unsupported engine control explicitly.
 - Correct desktop monitor selection and web callback measurement; replace continuous overlay tickers with bounded event-driven updates.
 - Add optional bounded telemetry, timeline/service-extension integration, regression tests and cross-platform CI configuration.
-- These changes alter public API and metric semantics. See `docs/migration.md` and `docs/implementation-status.md` for compatibility and qualification limits.
+- These changes alter public API and metric semantics. See `doc/migration.md` and `doc/implementation-status.md` for compatibility and qualification limits.
 
 ## 1.0.2
 

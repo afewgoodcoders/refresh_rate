@@ -4,21 +4,29 @@ on:
   pull_request:
 jobs:
   dart:
+    name: Dart (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        flutter: ['3.24.5', 'stable']
+        include:
+          - name: minimum
+            version: '3.24.5'
+          - name: stable
+            version: ''
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ matrix.flutter == 'stable' && '' || matrix.flutter }}
+          flutter-version: ${{ matrix.version }}
           channel: stable
           cache: true
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
       - run: python3 scripts/check_apple_sources.py
+      - run: flutter pub publish --dry-run
+        if: matrix.name == 'stable'
   native:
     strategy:
       fail-fast: false
