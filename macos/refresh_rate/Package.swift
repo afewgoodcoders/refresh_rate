@@ -25,11 +25,7 @@ let package = Package(
             dependencies: [
                 .product(name: "FlutterFramework", package: "FlutterFramework"),
             ],
-            path: "Classes",
-            publicHeadersPath: ".",
-            cSettings: [
-                .headerSearchPath("Classes"),
-            ]
+            path: "Sources/refresh_rate"
         ),
     ]
 )

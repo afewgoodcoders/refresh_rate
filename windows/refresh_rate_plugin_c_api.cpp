@@ -25,7 +25,7 @@ class RefreshRatePlugin : public flutter::Plugin, public RefreshRateHostApi {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar);
 
-  RefreshRatePlugin();
+  explicit RefreshRatePlugin(HWND window);
   virtual ~RefreshRatePlugin();
 
   // RefreshRateHostApi
@@ -37,10 +37,37 @@ class RefreshRatePlugin : public flutter::Plugin, public RefreshRateHostApi {
   std::optional<FlutterError> MatchContent(double fps) override { return std::nullopt; }
   std::optional<FlutterError> Boost(int64_t duration_ms) override { return std::nullopt; }
   std::optional<FlutterError> SetCategory(int64_t category_index) override { return std::nullopt; }
-  std::optional<FlutterError> SetTouchBoost(bool enabled) override { return std::nullopt; }
+  std::optional<FlutterError> SetTouchBoost(bool enabled) override { return FlutterError("unsupported", "Touch boost is unavailable on Windows"); }
+  ErrorOr<CapabilitiesMessage> GetCapabilities() override {
+    CapabilitiesMessage result; result.set_query(true); return result;
+  }
+  ErrorOr<DiagnosticsMessage> GetDiagnostics() override {
+    DiagnosticsMessage result;
+    result.set_source("windowsDisplayConfig");
+    result.set_scope("applicationMonitor");
+    const double rate = GetCurrentRate();
+    if (rate > 0) result.set_current_hz(rate);
+    return result;
+  }
+  ErrorOr<RequestResultMessage> SubmitPreference(const PreferenceMessage& preference) override {
+    const bool clear = preference.kind() && *preference.kind() == NativePreferenceKind::kSystem;
+    RequestResultMessage result;
+    result.set_status(clear ? NativeRequestStatus::kSubmitted : NativeRequestStatus::kUnsupported);
+    result.set_backend(clear ? "clearOwnedPreference" : "unavailable");
+    result.set_scope("applicationMonitor"); result.set_preference(preference);
+    return result;
+  }
+  ErrorOr<RequestResultMessage> ResetTouchBoost() override {
+    RequestResultMessage result; result.set_status(NativeRequestStatus::kUnsupported);
+    result.set_backend("unavailable"); result.set_scope("applicationMonitor"); return result;
+  }
+  ErrorOr<bool> StartObservation() override { return false; }
+  std::optional<FlutterError> StopObservation() override { return std::nullopt; }
   ErrorOr<bool> IsSupported() override { return false; }
 
  private:
+  HWND window_;
+  std::wstring DeviceName();
   double GetCurrentRate();
   double GetMaxRate();
   std::vector<double> GetSupportedRates();
@@ -50,12 +77,20 @@ class RefreshRatePlugin : public flutter::Plugin, public RefreshRateHostApi {
 
 void RefreshRatePlugin::RegisterWithRegistrar(
     flutter::PluginRegistrarWindows* registrar) {
-  auto plugin = std::make_unique<RefreshRatePlugin>();
+  auto* view = registrar->GetView();
+  auto plugin = std::make_unique<RefreshRatePlugin>(view ? view->GetNativeWindow() : nullptr);
   RefreshRateHostApi::SetUp(registrar->messenger(), plugin.get());
   registrar->AddPlugin(std::move(plugin));
 }
 
-RefreshRatePlugin::RefreshRatePlugin() {}
+RefreshRatePlugin::RefreshRatePlugin(HWND window) : window_(window) {}
+std::wstring RefreshRatePlugin::DeviceName() {
+  MONITORINFOEXW info{};
+  info.cbSize = sizeof(info);
+  const auto monitor = MonitorFromWindow(window_, MONITOR_DEFAULTTONULL);
+  if (!monitor || !GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&info))) return {};
+  return info.szDevice;
+}
 RefreshRatePlugin::~RefreshRatePlugin() {}
 
 double RefreshRatePlugin::GetCurrentRateViaQueryDisplayConfig() {
@@ -69,25 +104,32 @@ double RefreshRatePlugin::GetCurrentRateViaQueryDisplayConfig() {
                          &modeCount, modes.data(), nullptr) != ERROR_SUCCESS) {
     return 0.0;
   }
-  for (UINT32 i = 0; i < modeCount; i++) {
-    if (modes[i].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_TARGET) {
-      auto vsync = modes[i].targetMode.targetVideoSignalInfo.vSyncFreq;
-      if (vsync.Denominator > 0) {
-        return static_cast<double>(vsync.Numerator) / static_cast<double>(vsync.Denominator);
-      }
+  const auto device = DeviceName();
+  if (device.empty()) return 0.0;
+  for (UINT32 i = 0; i < pathCount; i++) {
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+    source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+    source.header.size = sizeof(source);
+    source.header.adapterId = paths[i].sourceInfo.adapterId;
+    source.header.id = paths[i].sourceInfo.id;
+    if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS && device == source.viewGdiDeviceName) {
+      const auto rate = paths[i].targetInfo.refreshRate;
+      if (rate.Denominator > 0) return static_cast<double>(rate.Numerator) / rate.Denominator;
     }
   }
   return 0.0;
 }
 
 double RefreshRatePlugin::GetCurrentRateViaEnumDisplaySettings() {
-  DEVMODE dm;
+  DEVMODEW dm{};
+  const auto device = DeviceName();
+  if (device.empty()) return 0.0;
   dm.dmSize = sizeof(dm);
-  if (EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &dm)) {
+  if (EnumDisplaySettingsW(device.c_str(), ENUM_CURRENT_SETTINGS, &dm)) {
     double rate = static_cast<double>(dm.dmDisplayFrequency);
     if (rate > 1) return rate;
   }
-  return 60.0;
+  return 0.0;
 }
 
 double RefreshRatePlugin::GetCurrentRate() {
@@ -98,19 +140,21 @@ double RefreshRatePlugin::GetCurrentRate() {
 
 double RefreshRatePlugin::GetMaxRate() {
   auto rates = GetSupportedRates();
-  if (rates.empty()) return GetCurrentRate();
+  if (rates.empty()) return 0.0;
   return *std::max_element(rates.begin(), rates.end());
 }
 
 std::vector<double> RefreshRatePlugin::GetSupportedRates() {
-  DEVMODE dm, current;
+  DEVMODEW dm{}, current{};
+  const auto device = DeviceName();
+  if (device.empty()) return {};
   dm.dmSize = sizeof(dm);
   current.dmSize = sizeof(current);
-  EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &current);
+  if (!EnumDisplaySettingsW(device.c_str(), ENUM_CURRENT_SETTINGS, &current)) return {};
 
   std::set<double> rateSet;
   int modeNum = 0;
-  while (EnumDisplaySettings(NULL, modeNum, &dm)) {
+  while (EnumDisplaySettingsW(device.c_str(), modeNum, &dm)) {
     if (dm.dmPelsWidth == current.dmPelsWidth &&
         dm.dmPelsHeight == current.dmPelsHeight &&
         dm.dmDisplayFrequency > 1) {
@@ -118,17 +162,16 @@ std::vector<double> RefreshRatePlugin::GetSupportedRates() {
     }
     modeNum++;
   }
-  if (rateSet.empty()) rateSet.insert(GetCurrentRate());
   return std::vector<double>(rateSet.begin(), rateSet.end());
 }
 
 ErrorOr<DisplayInfoMessage> RefreshRatePlugin::GetDisplayInfo() {
   double currentRate = GetCurrentRate();
   auto supportedRates = GetSupportedRates();
-  double maxRate = supportedRates.empty() ? currentRate
+  double maxRate = supportedRates.empty() ? 0.0
       : *std::max_element(supportedRates.begin(), supportedRates.end());
-  double minRate = supportedRates.empty() ? currentRate : supportedRates.front();
-  bool isVRR = (maxRate - minRate > 30) && supportedRates.size() <= 4;
+  double minRate = supportedRates.empty() ? 0.0 : supportedRates.front();
+
 
   flutter::EncodableList rates;
   for (double r : supportedRates) {
@@ -140,8 +183,7 @@ ErrorOr<DisplayInfoMessage> RefreshRatePlugin::GetDisplayInfo() {
   msg.set_max_rate(maxRate);
   msg.set_min_rate(minRate);
   msg.set_supported_rates(rates);
-  msg.set_is_variable_refresh_rate(isVRR);
-  msg.set_engine_target_rate(60.0);
+  msg.set_monitor_count(static_cast<int64_t>(GetSystemMetrics(SM_CMONITORS)));
   return msg;
 }
 

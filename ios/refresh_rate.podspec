@@ -1,15 +1,15 @@
 Pod::Spec.new do |s|
   s.name             = 'refresh_rate'
-  s.version          = '1.0.2'
+  s.version          = '1.0.3'
   s.summary          = 'Control display refresh rates in Flutter.'
   s.description      = <<-DESC
 Cross-platform Flutter plugin to query and control display refresh rates.
-Unlock high refresh rates (90Hz/120Hz/144Hz) by properly communicating
-with the OS compositor — something Flutter doesn't do by default.
+Reports source-qualified display capabilities and Flutter frame timings.
+System scheduling remains in control when engine control is unsupported.
                        DESC
-  s.homepage         = 'https://qoder.in'
+  s.homepage         = 'https://afewgoodcoders.com'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Qoder' => 'dev@qoder.in' }
+  s.author           = 'A Few Good Coders'
   s.source           = { :path => '.' }
   s.source_files     = [
     'refresh_rate/Sources/refresh_rate/**/*.swift',

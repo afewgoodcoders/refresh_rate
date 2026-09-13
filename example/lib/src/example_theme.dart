@@ -33,7 +33,7 @@ ThemeData buildExampleTheme() {
         ),
     chipTheme: ChipThemeData(
       backgroundColor: panelHigh,
-      selectedColor: cyan.withValues(alpha: 0.16),
+      selectedColor: cyan.withAlpha((255 * (0.16)).round()),
       side: BorderSide.none,
       labelStyle: const TextStyle(
         color: text,
@@ -65,7 +65,7 @@ ThemeData buildExampleTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: text,
-        side: BorderSide(color: cyan.withValues(alpha: 0.38)),
+        side: BorderSide(color: cyan.withAlpha((255 * (0.38)).round())),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
@@ -77,6 +77,6 @@ ThemeData buildExampleTheme() {
         ),
       ),
     ),
-    dividerColor: muted.withValues(alpha: 0.08),
+    dividerColor: muted.withAlpha((255 * (0.08)).round()),
   );
 }

@@ -26,7 +26,7 @@ apply plugin: "kotlin-android"
 
 android {
     namespace = "in.qoder.refresh_rate"
-    compileSdk = 35
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8

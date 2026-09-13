@@ -4,4 +4,16 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <application>
+        <provider
+            android:name=".RetainedEngineTestProvider"
+            android:authorities="${applicationId}.retained-engine-test"
+            android:exported="false" />
+        <activity
+            android:name="io.flutter.embedding.android.FlutterActivity"
+            android:exported="false"
+            android:theme="@style/NormalTheme"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" />
+    </application>
 </manifest>

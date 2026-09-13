@@ -2,247 +2,346 @@ package `in`.qoder.refresh_rate
 
 import android.app.Activity
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.display.DisplayManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.view.Display
 import android.view.Surface
+import android.view.SurfaceHolder
 import android.view.View
+import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.WindowManager
+import io.flutter.embedding.android.FlutterSurfaceView
+import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+import io.flutter.plugin.common.BinaryMessenger
+import `in`.qoder.refresh_rate.generated.*
 import `in`.qoder.refresh_rate.generated.DisplayInfoMessage
 import `in`.qoder.refresh_rate.generated.RefreshRateFlutterApi
 import `in`.qoder.refresh_rate.generated.RefreshRateHostApi
 
 class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
-
     private var activity: Activity? = null
+    private var messenger: BinaryMessenger? = null
+    private var foreignFlutterView = false
+    private var lastNativeRequest: RequestResultMessage? = null
+    private var targetGeneration = 0L
+    private var appliedGeneration = -1L
+    private var submissionCount = 0L
     private var context: Context? = null
     private var flutterApi: RefreshRateFlutterApi? = null
     private var displayListener: DisplayManager.DisplayListener? = null
-
-    // ─── FlutterPlugin ──────────────────────────────────────────
-
+    private var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
+    private var powerReceiver: BroadcastReceiver? = null
+    private var surfaceView: FlutterSurfaceView? = null
+    private var ownedSurface: Surface? = null
+    private var categoryView: View? = null
+    private var originalCategory: Float? = null
+    private var submittedCategory: Float? = null
+    private var pending: PreferenceMessage? = null
+    private var originalMode: Int? = null
+    private var originalRate: Float? = null
+    private var submittedMode: Int? = null
+    private var submittedRate: Float? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var boostGeneration = 0
+    private var pendingTouchBoost: Boolean? = null
+    private var originalTouchBoost: Boolean? = null
+    private var submittedTouchBoost: Boolean? = null
+    private val surfaceCallback = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) { targetGeneration++; handler.post { reapply() } }
+        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) { reapply() }
+        override fun surfaceDestroyed(holder: SurfaceHolder) { targetGeneration++; appliedGeneration = -1 }
+    }
+    private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+        val changed = bindSurface()
+        if (changed) reapply()
+    }
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        messenger = binding.binaryMessenger
         RefreshRateHostApi.setUp(binding.binaryMessenger, this)
         flutterApi = RefreshRateFlutterApi(binding.binaryMessenger)
-        registerDisplayListener()
+        registerListeners()
     }
-
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        detachActivity(); pending = null; pendingTouchBoost = null
+        boostGeneration++
+        handler.removeCallbacksAndMessages(null)
         RefreshRateHostApi.setUp(binding.binaryMessenger, null)
-        unregisterDisplayListener()
-        flutterApi = null
+        val dm = context?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        displayListener?.let { dm?.unregisterDisplayListener(it) }; displayListener = null
+        val pm = context?.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (Build.VERSION.SDK_INT >= 29) thermalListener?.let { pm?.removeThermalStatusListener(it) }
+        powerReceiver?.let { context?.unregisterReceiver(it) }; powerReceiver = null
+        flutterApi = null; context = null; messenger = null
     }
-
-    // ─── ActivityAware ──────────────────────────────────────────
-
-    override fun onAttachedToActivity(binding: ActivityPluginBinding) { activity = binding.activity }
-    override fun onDetachedFromActivityForConfigChanges() { activity = null }
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { activity = binding.activity }
-    override fun onDetachedFromActivity() { activity = null }
-
-    // ─── RefreshRateHostApi ─────────────────────────────────────
-
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        activity?.window?.decorView?.viewTreeObserver?.addOnGlobalLayoutListener(layoutListener)
+        targetGeneration++; bindSurface(); reapply(); applyTouchBoost(); publish()
+    }
+    override fun onDetachedFromActivityForConfigChanges() { detachActivity() }
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { onAttachedToActivity(binding) }
+    // The Dart owners belong to the engine, which may outlive this Activity.
+    // Clear the old target now; onAttachedToActivity reapplies to its replacement.
+    // onDetachedFromEngine is the point that discards the retained preference.
+    override fun onDetachedFromActivity() { detachActivity() }
+    private fun detachActivity() {
+        targetGeneration++; restoreTouchBoost()
+        clearOwnedPreference()
+        surfaceView?.holder?.removeCallback(surfaceCallback); surfaceView = null
+        activity?.window?.decorView?.viewTreeObserver?.removeOnGlobalLayoutListener(layoutListener)
+        activity = null
+    }
+    private fun bindSurface(): Boolean {
+        val candidates = mutableListOf<FlutterSurfaceView>()
+        foreignFlutterView = false
+        fun visit(view: View, insideFlutter: Boolean) {
+            if (view is FlutterView) {
+                val executor = view.attachedFlutterEngine?.dartExecutor
+                // Plugin bindings use the executor on some Flutter versions
+                // and its BinaryMessenger facade on others.
+                if (executor !== messenger && executor?.binaryMessenger !== messenger) {
+                    foreignFlutterView = true
+                    return
+                }
+            }
+            val inside = insideFlutter || view is FlutterView
+            if (inside && view is FlutterSurfaceView && view.isAttachedToWindow && view.visibility == View.VISIBLE) candidates.add(view)
+            if (view is ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i), inside)
+        }
+        activity?.window?.decorView?.let { visit(it, false) }
+        val found = candidates.singleOrNull()
+        if (found === surfaceView) return false
+        targetGeneration++
+        restoreCategory()
+        if (Build.VERSION.SDK_INT >= 30) ownedSurface?.takeIf { it.isValid }?.setFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+        ownedSurface = null
+        surfaceView?.holder?.removeCallback(surfaceCallback)
+        surfaceView = found; found?.holder?.addCallback(surfaceCallback)
+        return true
+    }
+    override fun getCapabilities() = CapabilitiesMessage(query = true,
+        surfaceVoting = Build.VERSION.SDK_INT >= 30,
+        windowPreferences = Build.VERSION.SDK_INT >= 23,
+        categoryHints = Build.VERSION.SDK_INT >= 35,
+        atLeast = Build.VERSION.SDK_INT >= 36,
+        contentMatching = Build.VERSION.SDK_INT >= 30,
+        touchBoost = Build.VERSION.SDK_INT >= 35,
+        callbackObservation = false)
+    override fun getDiagnostics(): DiagnosticsMessage {
+        val d = getDisplay()
+        return DiagnosticsMessage(source = "androidDisplay", displayId = d?.displayId?.toString(),
+            currentHz = d?.refreshRate?.toDouble(), activityAttached = activity != null,
+            surfaceAvailable = surfaceView?.holder?.surface?.isValid == true,
+            touchBoostEnabled = if (Build.VERSION.SDK_INT >= 35) activity?.window?.getFrameRateBoostOnTouchEnabled() else null,
+            lastNativeRequest = lastNativeRequest, targetGeneration = targetGeneration,
+            submissionCount = submissionCount,
+            suggestedNormalHz = if (Build.VERSION.SDK_INT >= 36) d?.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_NORMAL)?.toDouble() else null,
+            suggestedHighHz = if (Build.VERSION.SDK_INT >= 36) d?.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_HIGH)?.toDouble() else null)
+    }
+    override fun submitPreference(preference: PreferenceMessage): RequestResultMessage {
+        boostGeneration++
+        pending = preference
+        return recordRequest(preference)
+    }
+    override fun resetTouchBoost(): RequestResultMessage {
+        restoreTouchBoost(); pendingTouchBoost = null
+        return response(if (Build.VERSION.SDK_INT >= 35) NativeRequestStatus.SUBMITTED else NativeRequestStatus.UNSUPPORTED, "touchBoost")
+    }
+    override fun startObservation() = false
+    override fun stopObservation() {}
+    private fun response(status: NativeRequestStatus, backend: String = "unavailable", message: String? = null) =
+        RequestResultMessage(status = status, backend = backend, scope = when (backend) {
+            "flutterSurface" -> "flutterSurface"
+            "viewCategory" -> "flutterSurfaceView"
+            else -> "activityWindow"
+        }, message = message)
+    private fun applyRequest(args: PreferenceMessage): RequestResultMessage {
+        val kind = args.kind ?: throw IllegalArgumentException("Missing preference kind")
+        val fps = args.fps?.toFloat()
+        if (kind in listOf(NativePreferenceKind.CONTENT, NativePreferenceKind.AT_LEAST) && (fps == null || !fps.isFinite() || fps <= 0f || fps > 1000f)) throw IllegalArgumentException("Invalid FPS")
+        val category = args.category?.toInt() ?: 0
+        if (category !in 0..3) throw IllegalArgumentException("Invalid category")
+        if (activity == null) return response(NativeRequestStatus.UNAVAILABLE, message = "No attached activity; request will be reconciled on attachment.")
+        if (kind == NativePreferenceKind.SYSTEM) { clearOwnedPreference(); return response(NativeRequestStatus.SUBMITTED, "clearOwnedPreference") }
+        val d = getDisplay() ?: return response(NativeRequestStatus.UNAVAILABLE, message = "No display")
+        bindSurface()
+        if (kind == NativePreferenceKind.CATEGORY) {
+            if (Build.VERSION.SDK_INT < 35) return response(NativeRequestStatus.UNSUPPORTED, message = "Native view categories require API 35")
+            val view = surfaceView ?: return response(NativeRequestStatus.UNAVAILABLE, message = "No uniquely identified FlutterSurfaceView for category hint")
+            clearOwnedPreference()
+            val value = when (category) {
+                1 -> View.REQUESTED_FRAME_RATE_CATEGORY_LOW
+                2 -> View.REQUESTED_FRAME_RATE_CATEGORY_NORMAL
+                3 -> View.REQUESTED_FRAME_RATE_CATEGORY_HIGH
+                else -> View.REQUESTED_FRAME_RATE_CATEGORY_NO_PREFERENCE
+            }
+            categoryView = view; originalCategory = view.requestedFrameRate
+            view.setRequestedFrameRate(value); submittedCategory = value
+            return response(NativeRequestStatus.SUBMITTED, "viewCategory")
+        }
+        restoreCategory()
+        if (kind == NativePreferenceKind.CONTENT && Build.VERSION.SDK_INT < 30) return response(NativeRequestStatus.UNSUPPORTED, message = "Content surface votes require API 30")
+        if (kind == NativePreferenceKind.AT_LEAST && Build.VERSION.SDK_INT < 36) return response(NativeRequestStatus.UNSUPPORTED, message = "At-least compatibility requires API 36")
+        val mode = if (Build.VERSION.SDK_INT >= 23) d.mode else null
+        val rates = if (Build.VERSION.SDK_INT >= 23) d.supportedModes.filter { it.physicalWidth == mode?.physicalWidth && it.physicalHeight == mode.physicalHeight } else emptyList()
+        val maxRate = rates.maxOfOrNull { it.refreshRate } ?: d.refreshRate
+        val requested = when (kind) {
+            NativePreferenceKind.CONTENT, NativePreferenceKind.AT_LEAST -> fps!!
+            else -> if (Build.VERSION.SDK_INT >= 36) {
+                d.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_HIGH).takeIf { it.isFinite() && it > 0f } ?: maxRate
+            } else maxRate
+        }
+        if (requested == 0f) { clearOwnedPreference(); return response(NativeRequestStatus.SUBMITTED, "clearOwnedPreference") }
+        val surface = surfaceView?.holder?.surface?.takeIf { it.isValid }
+        if (Build.VERSION.SDK_INT >= 30 && surface != null) {
+            restoreWindow()
+            val compatibility = when {
+                kind == NativePreferenceKind.CONTENT -> Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                Build.VERSION.SDK_INT >= 36 -> Surface.FRAME_RATE_COMPATIBILITY_AT_LEAST
+                else -> Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
+            }
+            if (Build.VERSION.SDK_INT >= 31) surface.setFrameRate(requested, compatibility,
+                if (args.strategy == NativeSwitchStrategy.ALLOW_NON_SEAMLESS) Surface.CHANGE_FRAME_RATE_ALWAYS else Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS)
+            else if (args.strategy == NativeSwitchStrategy.ALLOW_NON_SEAMLESS) return response(NativeRequestStatus.UNSUPPORTED, message = "Switch strategy requires API 31")
+            else surface.setFrameRate(requested, compatibility)
+            ownedSurface = surface
+            return response(NativeRequestStatus.SUBMITTED, "flutterSurface")
+        }
+        if (kind == NativePreferenceKind.CONTENT || kind == NativePreferenceKind.AT_LEAST) return response(NativeRequestStatus.UNAVAILABLE, message = "No uniquely identified live FlutterSurfaceView; content semantics cannot be preserved by window fallback")
+        if (Build.VERSION.SDK_INT < 23) return response(NativeRequestStatus.UNSUPPORTED)
+        if (foreignFlutterView) return response(NativeRequestStatus.UNAVAILABLE, message = "Window fallback would affect another Flutter engine")
+        val window = activity!!.window
+        val params = window.attributes
+        if (originalMode == null) { originalMode = params.preferredDisplayModeId; originalRate = params.preferredRefreshRate }
+        // Window refresh-rate hint preserves resolution; no implicit mode switch.
+        params.preferredRefreshRate = requested
+        submittedRate = requested; submittedMode = params.preferredDisplayModeId
+        window.attributes = params
+        return response(NativeRequestStatus.SUBMITTED, "windowPreference", "No qualified Flutter surface; using a window refresh-rate hint")
+    }
+    private fun restoreWindow() {
+        val window = activity?.window ?: return
+        val params = window.attributes
+        if (originalMode != null && params.preferredDisplayModeId == submittedMode && params.preferredRefreshRate == submittedRate) {
+            params.preferredDisplayModeId = originalMode!!; params.preferredRefreshRate = originalRate ?: 0f
+            window.attributes = params
+        }
+        originalMode = null; originalRate = null; submittedMode = null; submittedRate = null
+    }
+    private fun clearOwnedPreference() {
+        restoreCategory()
+        if (Build.VERSION.SDK_INT >= 30) ownedSurface?.takeIf { it.isValid }?.setFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+        ownedSurface = null
+        restoreWindow()
+    }
+    private fun restoreCategory() {
+        if (Build.VERSION.SDK_INT >= 35) {
+            val view = categoryView
+            if (view != null && view.requestedFrameRate == submittedCategory) {
+                originalCategory?.let { view.setRequestedFrameRate(it) }
+            }
+        }
+        categoryView = null; originalCategory = null; submittedCategory = null
+    }
+    private fun recordRequest(args: PreferenceMessage): RequestResultMessage {
+        submissionCount++
+        val outcome = try { applyRequest(args) } catch (error: Exception) {
+            response(NativeRequestStatus.FAILED, message = error.message)
+        }
+        lastNativeRequest = outcome.copy(preference = args, observedAtMs = System.currentTimeMillis())
+        appliedGeneration = if (outcome.status == NativeRequestStatus.SUBMITTED) targetGeneration else -1L
+        return lastNativeRequest!!
+    }
+    private fun reapply() {
+        val preference = pending ?: return
+        if (lastNativeRequest?.status == NativeRequestStatus.SUBMITTED &&
+            lastNativeRequest?.preference == preference && appliedGeneration == targetGeneration) return
+        recordRequest(preference)
+    }
     override fun getDisplayInfo(): DisplayInfoMessage {
         val display = getDisplay()
-        val currentRate = display?.refreshRate?.toDouble() ?: 60.0
-        val modes = display?.supportedModes ?: emptyArray()
-        val supportedRates = modes.map { it.refreshRate.toDouble() }.distinct().sorted()
-        val maxRate = supportedRates.maxOrNull() ?: 60.0
-        val minRate = supportedRates.minOrNull() ?: 60.0
-        val isVRR = (maxRate - minRate > 30) && modes.size <= 4
+        val modes = if (Build.VERSION.SDK_INT >= 23) display?.supportedModes ?: emptyArray() else emptyArray()
+        val current = if (Build.VERSION.SDK_INT >= 23) display?.mode else null
+        val rates = modes.filter { it.physicalWidth == current?.physicalWidth && it.physicalHeight == current.physicalHeight }.map { it.refreshRate.toDouble() }.distinct().sorted()
         val pm = context?.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val thermalIndex: Long? = if (Build.VERSION.SDK_INT >= 29) {
-            when (pm?.currentThermalStatus) {
-                PowerManager.THERMAL_STATUS_NONE -> 0L
-                PowerManager.THERMAL_STATUS_LIGHT, PowerManager.THERMAL_STATUS_MODERATE -> 1L
-                PowerManager.THERMAL_STATUS_SEVERE -> 2L
-                PowerManager.THERMAL_STATUS_CRITICAL,
-                PowerManager.THERMAL_STATUS_EMERGENCY,
-                PowerManager.THERMAL_STATUS_SHUTDOWN -> 3L
-                else -> null
-            }
+        val thermal: Long? = if (Build.VERSION.SDK_INT >= 29) when(pm?.currentThermalStatus) {
+            0 -> 0L; 1, 2 -> 1L; 3 -> 2L; 4, 5, 6 -> 3L; else -> null
         } else null
-
-        // hasArrSupport() is API 36+ — fall back to VRR heuristic for now
-        val hasArr = isVRR
-
-        return DisplayInfoMessage(
-            currentRate = currentRate,
-            maxRate = maxRate,
-            minRate = minRate,
-            supportedRates = supportedRates,
-            isVariableRefreshRate = isVRR,
-            engineTargetRate = currentRate,
-            androidApiLevel = Build.VERSION.SDK_INT.toLong(),
-            isLowPowerMode = pm?.isPowerSaveMode,
-            thermalStateIndex = thermalIndex,
-            hasAdaptiveRefreshRate = hasArr,
-            iosProMotionEnabled = null,
-            displayServer = null,
-            monitorCount = null,
-        )
+        return DisplayInfoMessage(currentRate = display?.refreshRate?.toDouble(), maxRate = rates.maxOrNull(), minRate = rates.minOrNull(),
+            supportedRates = rates, isVariableRefreshRate = null, engineTargetRate = null,
+            androidApiLevel = Build.VERSION.SDK_INT.toLong(), isLowPowerMode = pm?.isPowerSaveMode,
+            thermalStateIndex = thermal, hasAdaptiveRefreshRate = if (Build.VERSION.SDK_INT >= 36) display?.hasArrSupport() else null)
     }
-
-    override fun enable() = setDeviceDefault()
-    override fun disable() = resetToDefault()
-    override fun preferMax() = setDeviceDefault()
-    override fun preferDefault() = resetToDefault()
-
-    override fun matchContent(fps: Double) {
-        if (Build.VERSION.SDK_INT >= 30) {
-            setSurfaceFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, forceAlways = true)
-        } else if (Build.VERSION.SDK_INT >= 23) {
-            setPreferredDisplayMode(fps.toFloat())
-        }
+    private fun legacy(kind: NativePreferenceKind, fps: Double? = null) {
+        submitPreference(PreferenceMessage(kind = kind, fps = fps, strategy = NativeSwitchStrategy.SEAMLESS_ONLY))
     }
-
+    override fun enable() = legacy(NativePreferenceKind.HIGH)
+    override fun disable() = legacy(NativePreferenceKind.SYSTEM)
+    override fun preferMax() = legacy(NativePreferenceKind.HIGH)
+    override fun preferDefault() = legacy(NativePreferenceKind.SYSTEM)
+    override fun matchContent(fps: Double) = legacy(NativePreferenceKind.CONTENT, fps)
     override fun boost(durationMs: Long) {
-        val display = getDisplay() ?: return
-        val maxRate = display.supportedModes.maxByOrNull { it.refreshRate }?.refreshRate ?: 60f
-        if (Build.VERSION.SDK_INT >= 35) {
-            try { activity?.window?.decorView?.setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_HIGH.toFloat()) } catch (_: Exception) {}
-        }
-        setSurfaceFrameRate(maxRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, forceAlways = true)
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ resetToDefault() }, durationMs)
+        require(durationMs > 0 && durationMs <= 86400000)
+        val previous = pending; legacy(NativePreferenceKind.HIGH); val generation = boostGeneration
+        handler.postDelayed({ if (generation == boostGeneration) {
+            pending = previous ?: PreferenceMessage(kind = NativePreferenceKind.SYSTEM)
+            reapply()
+        } }, durationMs)
     }
-
     override fun setCategory(categoryIndex: Long) {
-        if (Build.VERSION.SDK_INT < 35) {
-            when (categoryIndex.toInt()) {
-                3 -> setDeviceDefault()
-                0, 1 -> resetToDefault()
-                else -> {}
-            }
-            return
-        }
-        try {
-            val categoryFloat = when (categoryIndex.toInt()) {
-                0 -> 0f
-                1 -> View.REQUESTED_FRAME_RATE_CATEGORY_LOW.toFloat()
-                2 -> View.REQUESTED_FRAME_RATE_CATEGORY_NORMAL.toFloat()
-                3 -> View.REQUESTED_FRAME_RATE_CATEGORY_HIGH.toFloat()
-                else -> View.REQUESTED_FRAME_RATE_CATEGORY_HIGH.toFloat()
-            }
-            activity?.window?.decorView?.setRequestedFrameRate(categoryFloat)
-        } catch (_: Exception) {}
+        require(categoryIndex in 0..3)
+        submitPreference(PreferenceMessage(kind = NativePreferenceKind.CATEGORY, category = categoryIndex))
     }
-
     override fun setTouchBoost(enabled: Boolean) {
-        if (Build.VERSION.SDK_INT >= 35) {
-            try { activity?.window?.setFrameRateBoostOnTouchEnabled(enabled) } catch (_: Exception) {}
-        }
+        check(Build.VERSION.SDK_INT >= 35) { "Touch boost requires Android API 35" }
+        pendingTouchBoost = enabled
+        applyTouchBoost()
     }
-
+    private fun applyTouchBoost() {
+        if (Build.VERSION.SDK_INT < 35) return
+        val value = pendingTouchBoost ?: return
+        val window = activity?.window ?: return
+        if (originalTouchBoost == null) originalTouchBoost = window.getFrameRateBoostOnTouchEnabled()
+        window.setFrameRateBoostOnTouchEnabled(value); submittedTouchBoost = value
+    }
+    private fun restoreTouchBoost() {
+        if (Build.VERSION.SDK_INT >= 35) {
+            val window = activity?.window
+            if (window != null && originalTouchBoost != null && window.getFrameRateBoostOnTouchEnabled() == submittedTouchBoost) {
+                window.setFrameRateBoostOnTouchEnabled(originalTouchBoost!!)
+            }
+        }
+        originalTouchBoost = null; submittedTouchBoost = null
+    }
     override fun isSupported(): Boolean = Build.VERSION.SDK_INT >= 23
-
-    // ─── Private helpers ────────────────────────────────────────
-
-    private fun setDeviceDefault() {
-        val display = getDisplay() ?: return
-        val maxRate = display.supportedModes.maxByOrNull { it.refreshRate }?.refreshRate ?: 60f
-        if (Build.VERSION.SDK_INT >= 35) {
-            try {
-                val window = activity?.window
-                window?.decorView?.setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_HIGH.toFloat())
-                window?.setFrameRateBoostOnTouchEnabled(true)
-            } catch (_: Exception) {}
-            setSurfaceFrameRate(maxRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
-        } else if (Build.VERSION.SDK_INT >= 30) {
-            setSurfaceFrameRate(maxRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
-        } else if (Build.VERSION.SDK_INT >= 23) {
-            setPreferredDisplayMode(maxRate)
-        }
-    }
-
-    private fun resetToDefault() {
-        if (Build.VERSION.SDK_INT >= 35) {
-            try {
-                val window = activity?.window
-                window?.decorView?.setRequestedFrameRate(0f)
-                window?.setFrameRateBoostOnTouchEnabled(false)
-            } catch (_: Exception) {}
-            setSurfaceFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
-        } else if (Build.VERSION.SDK_INT >= 30) {
-            setSurfaceFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
-        } else if (Build.VERSION.SDK_INT >= 23) {
-            try {
-                val params = activity?.window?.attributes ?: return
-                params.preferredDisplayModeId = 0
-                activity?.window?.attributes = params
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun setSurfaceFrameRate(frameRate: Float, compatibility: Int, forceAlways: Boolean = false): Boolean {
-        if (Build.VERSION.SDK_INT < 30) return false
-        return try {
-            val window = activity?.window ?: return false
-            val strategy = if (Build.VERSION.SDK_INT >= 31) {
-                if (forceAlways) Surface.CHANGE_FRAME_RATE_ALWAYS
-                else Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS
-            } else -1
-            val params = window.attributes
-            params.preferredRefreshRate = frameRate
-            val display = getDisplay()
-            if (display != null && frameRate > 0) {
-                val targetMode = display.supportedModes
-                    .filter { it.refreshRate >= frameRate - 1f }
-                    .minByOrNull { Math.abs(it.refreshRate - frameRate) }
-                if (targetMode != null) params.preferredDisplayModeId = targetMode.modeId
-            } else if (frameRate == 0f) {
-                params.preferredDisplayModeId = 0
-                params.preferredRefreshRate = 0f
-            }
-            window.attributes = params
-            true
-        } catch (e: Exception) { false }
-    }
-
-    private fun setPreferredDisplayMode(targetRate: Float): Boolean {
-        if (Build.VERSION.SDK_INT < 23) return false
-        return try {
-            val window = activity?.window ?: return false
-            val display = getDisplay() ?: return false
-            val currentMode = display.mode
-            val targetMode = display.supportedModes
-                .filter { it.physicalWidth == currentMode.physicalWidth && it.physicalHeight == currentMode.physicalHeight }
-                .minByOrNull { Math.abs(it.refreshRate - targetRate) }
-            if (targetMode != null) {
-                val params = window.attributes
-                params.preferredDisplayModeId = targetMode.modeId
-                window.attributes = params
-                true
-            } else false
-        } catch (e: Exception) { false }
-    }
-
-    private fun registerDisplayListener() {
-        val dm = context?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return
+    private fun publish() { handler.post { flutterApi?.onDisplayInfoChanged(getDisplayInfo()) {} } }
+    private fun registerListeners() {
+        val dm = context?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         displayListener = object : DisplayManager.DisplayListener {
-            override fun onDisplayChanged(displayId: Int) {
-                activity?.runOnUiThread { flutterApi?.onDisplayInfoChanged(getDisplayInfo()) {} }
-            }
-            override fun onDisplayAdded(displayId: Int) {}
-            override fun onDisplayRemoved(displayId: Int) {}
+            override fun onDisplayChanged(displayId: Int) { publish() }
+            override fun onDisplayAdded(displayId: Int) { publish() }
+            override fun onDisplayRemoved(displayId: Int) { publish() }
         }
-        dm.registerDisplayListener(displayListener, null)
+        dm?.registerDisplayListener(displayListener, handler)
+        val pm = context?.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (Build.VERSION.SDK_INT >= 29) {
+            thermalListener = PowerManager.OnThermalStatusChangedListener { publish() }
+            pm?.addThermalStatusListener(context!!.mainExecutor, thermalListener!!)
+        }
+        powerReceiver = object : BroadcastReceiver() { override fun onReceive(context: Context?, intent: Intent?) { publish() } }
+        context?.registerReceiver(powerReceiver, IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED))
     }
-
-    private fun unregisterDisplayListener() {
-        val dm = context?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return
-        displayListener?.let { dm.unregisterDisplayListener(it) }
-        displayListener = null
-    }
-
     @Suppress("DEPRECATION")
-    private fun getDisplay(): Display? = if (Build.VERSION.SDK_INT >= 30) {
-        activity?.display
-    } else {
-        (context?.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)?.defaultDisplay
-    }
+    private fun getDisplay(): Display? = if (Build.VERSION.SDK_INT >= 30) activity?.display else activity?.windowManager?.defaultDisplay
 }
