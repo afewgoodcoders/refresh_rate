@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../refresh_rate.dart';
+import '../control/rate_controller.dart';
 import 'fps_tracker.dart';
 
 Widget _panel(BuildContext context, Widget child) => Positioned(
@@ -21,6 +22,15 @@ Widget _panel(BuildContext context, Widget child) => Positioned(
                             fontFeatures: [FontFeature.tabularFigures()]),
                         child: child))))));
 String _rate(double? value) => value?.toStringAsFixed(1) ?? 'unknown';
+
+String _preference(RatePreference preference) => switch (preference.kind) {
+      PreferenceKind.content =>
+        'content ${preference.fps!.toStringAsFixed(3)} FPS',
+      PreferenceKind.atLeast => 'at least ${_rate(preference.fps)} FPS',
+      PreferenceKind.category =>
+        'category ${['none', 'low', 'normal', 'high'][preference.category!]}',
+      _ => preference.kind.name,
+    };
 
 /// Event-driven Flutter cadence badge.
 class FpsOverlayWidget extends StatelessWidget {
@@ -63,7 +73,10 @@ class HzOverlayWidget extends StatelessWidget {
 class FullOverlayWidget extends StatelessWidget {
   /// Creates a [FullOverlayWidget] with the supplied configuration.
   const FullOverlayWidget(
-      {super.key, required this.tracker, this.stale = false});
+      {super.key, required this.tracker, this.stale = false, this.expectedFps});
+
+  /// Application-declared workload cadence; absent means unknown budget.
+  final double? expectedFps;
 
   /// Accumulator supplying the displayed recent metrics.
   final FpsTracker tracker;
@@ -80,7 +93,13 @@ class FullOverlayWidget extends StatelessWidget {
             Text(stale
                 ? 'Flutter: idle / stale'
                 : 'Flutter ${tracker.recentFps().toStringAsFixed(0)} FPS'),
-            Text('Requested: ${RefreshRate.requestedPreference.kind.name}'),
+            Text('Requested: ${_preference(RefreshRate.requestedPreference)}'),
+            Text(expectedFps == null
+                ? 'Workload: unknown · budget: unknown'
+                : 'Workload: ${_rate(expectedFps)} FPS · budget: ${(1000 / expectedFps!).toStringAsFixed(2)} ms'),
+            Text(tracker.budgetedFrameCount == 0 || stale
+                ? 'Phase overruns: unknown'
+                : 'Phase overruns: ${(100 * tracker.phaseOverruns / tracker.budgetedFrameCount).toStringAsFixed(1)}%'),
             Text(
                 'OS display: ${_rate(RefreshRate.info.nativeReportedDisplayHz)} Hz'),
             Text(
@@ -91,18 +110,26 @@ class FullOverlayWidget extends StatelessWidget {
             SizedBox(
                 width: 160,
                 height: 32,
-                child: CustomPaint(painter: _FrameGraph(tracker.samples))),
+                child: CustomPaint(
+                    painter: _FrameGraph(tracker.samples,
+                        expectedFps == null ? null : 1000 / expectedFps!))),
             const Text('Observer enabled · presentation unavailable',
                 style: TextStyle(fontSize: 9)),
           ]));
 }
 
 class _FrameGraph extends CustomPainter {
-  _FrameGraph(this.frames);
+  _FrameGraph(this.frames, this.budgetMs);
+  final double? budgetMs;
   final List<FrameSample> frames;
   @override
   void paint(Canvas canvas, Size size) {
     if (frames.length < 2) return;
+    if (budgetMs != null) {
+      final y = size.height * (1 - (budgetMs! / 50).clamp(0, 1));
+      canvas.drawLine(
+          Offset(0, y), Offset(size.width, y), Paint()..color = Colors.amber);
+    }
     final path = Path();
     final start = frames.length > 120 ? frames.length - 120 : 0;
     for (var i = start; i < frames.length; i++) {
@@ -123,5 +150,6 @@ class _FrameGraph extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FrameGraph oldDelegate) => oldDelegate.frames != frames;
+  bool shouldRepaint(_FrameGraph oldDelegate) =>
+      oldDelegate.frames != frames || oldDelegate.budgetMs != budgetMs;
 }

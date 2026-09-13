@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:refresh_rate/refresh_rate.dart';
 import 'package:refresh_rate/src/verification/fps_tracker.dart';
-import 'package:refresh_rate/src/verification/frame_collector.dart';
 import 'package:refresh_rate/src/verification/session_clock.dart';
-import 'package:refresh_rate/src/verification/session_scorer.dart';
 import 'refresh_rate_api_test.dart' show FakeHostApi;
 
 FrameSample frame(int time, {double? target = 60}) => FrameSample(
@@ -78,29 +75,6 @@ void main() {
     wall = wall.subtract(const Duration(hours: 1));
     expect(clock.now().difference(start), const Duration(seconds: 2));
     expect(clock.discontinuity, true);
-  });
-  test('input proxy respects exclusions and readiness stays separate',
-      () async {
-    var now = DateTime.utc(2026);
-    final session = RefreshRateSession.create('input', DisplayInfo.fallback,
-        clock: () => now, expectedFps: 60, finalizationTimeout: Duration.zero);
-    session.markInteraction('tap');
-    session.addSamplesForTesting([frame(10000)]);
-    now = now.add(const Duration(milliseconds: 20));
-    session.markReady();
-    session.markInteraction('unanswered');
-    session.pause();
-    now = now.add(const Duration(seconds: 1));
-    session.resume();
-    session.addSamplesForTesting([frame(1100000)]);
-    now = now.add(const Duration(seconds: 1));
-    final report = await session.end();
-    final interactions = report.milestones['interactions'] as List;
-    expect(interactions.first['nextFrameLatencyMs'], 10);
-    expect(interactions.last['nextFrameLatencyMs'], isNull);
-    expect(report.milestones['firstObservedFlutterFrameMs'], 10);
-    expect(report.milestones['applicationReadyMs'], 20);
-    expect(jsonDecode(report.toNdjson()), report.toMap());
   });
   test('privacy filtering covers nested tags and arbitrary sensitive text', () {
     final policy = TelemetryExportPolicy(
@@ -172,139 +146,6 @@ void main() {
     expect(RefreshRate.requestedPreference.kind, PreferenceKind.system);
     await policy.dispose();
     await changes.close();
-  });
-  test('quality advice requires sustained work and sustained recovery',
-      () async {
-    final changes = StreamController<DisplayInfo>.broadcast();
-    final received = <QualityRecommendation>[];
-    final quality = RefreshRateQualityController(
-        onRecommendation: received.add,
-        changes: changes.stream,
-        initialInfo: DisplayInfo.fallback,
-        badFrames: 3,
-        recoveryFrames: 5);
-    quality.setWorkload(60);
-    final epoch = DateTime.now().toUtc().microsecondsSinceEpoch + 1000;
-    var vsync = 0;
-    void deliver(int count, int cost) {
-      PlatformDispatcher.instance.onReportTimings!(List.generate(count, (_) {
-        vsync += 16667;
-        return FrameTiming(
-            vsyncStart: vsync,
-            buildStart: vsync,
-            buildFinish: vsync + cost,
-            rasterStart: vsync + cost,
-            rasterFinish: vsync + cost + 1000,
-            rasterFinishWallTime: epoch + vsync + cost + 1000);
-      }));
-    }
-
-    deliver(2, 20000);
-    expect(received, isEmpty);
-    deliver(1, 20000);
-    expect(received.single.level, QualityLevel.reduced);
-    deliver(4, 1000);
-    expect(received.length, 1);
-    deliver(1, 1000);
-    expect(received.last.level, QualityLevel.normal);
-    quality.setWorkload(null);
-    expect(FrameCollector.instance.subscriberCount, 0);
-    await quality.dispose();
-    await changes.close();
-  });
-  test('rendering context is opt-in per subscriber', () {
-    List<FrameSample>? plain, detailed;
-    final stopPlain = FrameCollector.instance.subscribe((f) => plain = f);
-    final stopDetailed = FrameCollector.instance
-        .subscribe((f) => detailed = f, includeRenderingContext: true);
-    PlatformDispatcher.instance.onReportTimings!([
-      FrameTiming(
-          vsyncStart: 1,
-          buildStart: 1,
-          buildFinish: 2,
-          rasterStart: 2,
-          rasterFinish: 3,
-          rasterFinishWallTime: 1700000000000003,
-          layerCacheCount: 7,
-          layerCacheBytes: 400,
-          pictureCacheCount: 3,
-          pictureCacheBytes: 200)
-    ]);
-    expect(plain!.single.renderingContext, isNull);
-    expect(detailed!.single.renderingContext!['layerCacheCount'], 7);
-    stopPlain();
-    stopDetailed();
-    expect(FrameCollector.instance.subscriberCount, 0);
-  });
-  test(
-      'repeated-run gates reject mismatched environments and observe regressions',
-      () {
-    SessionReport report(int rasterUs) {
-      final tracker = FpsTracker();
-      for (var i = 0; i < 120; i++) {
-        tracker.addSample(FrameSample(
-            buildUs: 1000,
-            rasterUs: rasterUs,
-            totalUs: 1000 + rasterUs,
-            vsyncUs: i * 16667,
-            timestamp:
-                DateTime.utc(2026).add(Duration(microseconds: i * 16667)),
-            targetHz: 60));
-      }
-      return SessionScorer.compute(
-          sessionName: 'feed',
-          tracker: tracker,
-          targetHz: 60,
-          validDuration: const Duration(seconds: 2),
-          excludedDuration: Duration.zero,
-          exclusionReasons: {},
-          deviceState:
-              const DeviceStateSnapshot(thermalState: ThermalState.nominal),
-          expectedWorkloadFrameCount: 120,
-          boundaryCoverageComplete: true,
-          debugBuild: false);
-    }
-
-    final baseline = BenchmarkSeries(
-        reports: [report(1000), report(2000), report(3000)],
-        environmentKey: 'device-build');
-    final current = BenchmarkSeries(
-        reports: [report(2000), report(3000), report(4000)],
-        environmentKey: 'device-build');
-    final result = current.compareTo(baseline);
-    expect(result.inconclusive, false);
-    expect(result.passed, false);
-    expect(result.regressionPercent, closeTo(50, 1));
-    expect(
-        current
-            .compareTo(BenchmarkSeries(
-                reports: baseline.reports, environmentKey: 'different-device'))
-            .inconclusive,
-        true);
-    expect(
-        BenchmarkSeries(reports: [report(1000)], environmentKey: 'device-build')
-            .compareTo(baseline)
-            .inconclusive,
-        true);
-  });
-  testWidgets('completed report inspection does not collect or sustain frames',
-      (tester) async {
-    final report = SessionScorer.compute(
-        sessionName: 'completed-session',
-        tracker: FpsTracker(),
-        targetHz: 60,
-        validDuration: Duration.zero,
-        excludedDuration: Duration.zero,
-        exclusionReasons: {},
-        deviceState:
-            const DeviceStateSnapshot(thermalState: ThermalState.unknown));
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(body: RefreshRateReportView(report: report))));
-    await tester.pumpAndSettle();
-    expect(find.text('completed-session'), findsOneWidget);
-    expect(find.text('Physical presentation FPS: unavailable'), findsOneWidget);
-    expect(FrameCollector.instance.subscriberCount, 0);
-    expect(tester.binding.hasScheduledFrame, false);
   });
   test('doctor returns actionable evidence when native registration is missing',
       () async {

@@ -2,7 +2,7 @@ name: refresh_rate
 description: >-
   Request display refresh rates, measure Flutter frame cadence and phase
   timings, and export source-qualified benchmark reports and telemetry.
-version: 1.0.3
+version: 2.0.0
 homepage: https://www.afewgoodcoders.com
 repository: https://github.com/afewgoodcoders/refresh_rate
 issue_tracker: https://github.com/afewgoodcoders/refresh_rate/issues
@@ -37,7 +37,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  pigeon: ^22.0.0
+  pigeon: 22.7.4
 
 flutter:
   plugin:

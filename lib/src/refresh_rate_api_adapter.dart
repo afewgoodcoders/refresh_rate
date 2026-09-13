@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
 import 'control/rate_controller.dart';
 
 import 'generated/refresh_rate_api.g.dart';
@@ -57,75 +56,122 @@ abstract interface class RefreshRateRequestAdapter {
 
   /// Supported operations, separate from observed outcomes.
   Future<RefreshRateCapabilities> capabilities();
+
+  /// Restores the owned native touch preference.
+  Future<RateRequestResult> resetTouchBoost();
 }
 
-/// Production Pigeon queries and source-qualified method-channel controls.
+/// Every native operation is transported through generated Pigeon bindings.
 class PigeonRefreshRateApiAdapter
     implements
         RefreshRateApiAdapter,
         RefreshRateRequestAdapter,
         RefreshRateDiagnosticsAdapter {
-  static const _control = MethodChannel('refresh_rate/control');
   Future<Map<Object?, Object?>>? _observation;
+
+  static PreferenceMessage _message(RatePreference preference) =>
+      PreferenceMessage(
+        kind: NativePreferenceKind.values.byName(preference.kind.name),
+        fps: preference.fps,
+        category: preference.category,
+        strategy: NativeSwitchStrategy.values.byName(preference.strategy.name),
+      );
+
+  static RateRequestResult _result(
+          RequestResultMessage message, RatePreference preference) =>
+      RateRequestResult(
+        preference: preference,
+        status: message.status == null
+            ? RequestStatus.unavailable
+            : RequestStatus.values.byName(message.status!.name),
+        backend: message.backend ?? 'unavailable',
+        scope: message.scope ?? 'unknown',
+        message: message.message,
+      );
+
   @override
   Future<Map<Object?, Object?>> diagnostics() async {
-    try {
-      return await _control.invokeMapMethod<Object?, Object?>('diagnostics') ??
-          {};
-    } on MissingPluginException {
-      return {};
-    }
+    final data = await _pigeon.getDiagnostics();
+    final last = data.lastNativeRequest;
+    return {
+      'source': data.source,
+      'displayId': data.displayId,
+      'scope': data.scope,
+      'currentHz': data.currentHz,
+      'maximumHz': data.maximumHz,
+      'suggestedNormalHz': data.suggestedNormalHz,
+      'suggestedHighHz': data.suggestedHighHz,
+      'callbackHz': data.callbackHz,
+      'expectedCallbackHz': data.expectedCallbackHz,
+      'sampleCount': data.sampleCount,
+      'windowUs': data.windowUs,
+      'activityAttached': data.activityAttached,
+      'surfaceAvailable': data.surfaceAvailable,
+      'touchBoostEnabled': data.touchBoostEnabled,
+      'targetGeneration': data.targetGeneration,
+      'submissionCount': data.submissionCount,
+      'lastNativeRequest': last == null
+          ? null
+          : {
+              'status': last.status?.name,
+              'backend': last.backend,
+              'scope': last.scope,
+              'message': last.message,
+              'observedAtMs': last.observedAtMs,
+              'preference': last.preference == null
+                  ? null
+                  : {
+                      'kind': last.preference!.kind?.name,
+                      'fps': last.preference!.fps,
+                      'category': last.preference!.category,
+                      'strategy': last.preference!.strategy?.name,
+                    },
+            },
+    };
   }
 
   @override
   Future<Map<Object?, Object?>> observeNativeCadence(Duration duration) =>
       _observation ??= _observe(duration);
   Future<Map<Object?, Object?>> _observe(Duration duration) async {
+    var started = false;
     try {
-      await _control.invokeMethod<void>('startObservation');
+      started = await _pigeon.startObservation();
+      if (!started) return {};
       await Future<void>.delayed(duration);
       return await diagnostics();
-    } on MissingPluginException {
-      return {};
     } finally {
       try {
-        await _control.invokeMethod<void>('stopObservation');
-      } on MissingPluginException {/* Unsupported observer. */}
-      _observation = null;
+        if (started) await _pigeon.stopObservation();
+      } finally {
+        _observation = null;
+      }
     }
   }
 
   @override
   Future<RefreshRateCapabilities> capabilities() async {
-    try {
-      final map =
-          await _control.invokeMapMethod<Object?, Object?>('capabilities');
-      return RefreshRateCapabilities.fromMap(map ?? {});
-    } on MissingPluginException {
-      return const RefreshRateCapabilities();
-    }
+    final data = await _pigeon.getCapabilities();
+    return RefreshRateCapabilities(
+        query: data.query == true,
+        surfaceVoting: data.surfaceVoting == true,
+        windowPreferences: data.windowPreferences == true,
+        categoryHints: data.categoryHints == true,
+        engineControl: data.engineControl == true,
+        presentationObservation: data.presentationObservation == true,
+        atLeast: data.atLeast == true,
+        contentMatching: data.contentMatching == true,
+        touchBoost: data.touchBoost == true,
+        callbackObservation: data.callbackObservation == true);
   }
 
   @override
-  Future<RateRequestResult> submit(RatePreference preference) async {
-    try {
-      final map = await _control.invokeMapMethod<Object?, Object?>(
-          'request', preference.toMap());
-      return RateRequestResult(
-          preference: preference,
-          status: RequestStatus.values.firstWhere(
-              (s) => s.name == map?['status'],
-              orElse: () => RequestStatus.unavailable),
-          backend: map?['backend'] as String? ?? 'unavailable',
-          scope: map?['scope'] as String? ?? 'unknown',
-          message: map?['message'] as String?);
-    } on MissingPluginException {
-      return RateRequestResult(
-          preference: preference,
-          status: RequestStatus.unsupported,
-          message: 'This platform has no qualified control backend.');
-    }
-  }
+  Future<RateRequestResult> submit(RatePreference preference) async =>
+      _result(await _pigeon.submitPreference(_message(preference)), preference);
+
+  @override
+  Future<RateRequestResult> resetTouchBoost() async =>
+      _result(await _pigeon.resetTouchBoost(), const RatePreference.system());
 
   final RefreshRateHostApi _pigeon;
 

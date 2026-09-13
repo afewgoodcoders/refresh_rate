@@ -49,9 +49,6 @@ class RefreshRateSession {
   final DateTime Function() _now;
   final DateTime _startedAt;
   SessionClock? _clockSource;
-  DateTime? _firstFrame, _readyAt;
-  final _interactions = <Map<String, Object?>>[];
-  int _droppedInteractions = 0;
 
   /// Excluded warmup interval after foreground resume.
   final Duration finalizationTimeout, warmupDuration;
@@ -77,7 +74,6 @@ class RefreshRateSession {
     String name,
     DisplayInfo info, {
     double? expectedFps,
-    bool includeRenderingContext = false,
     Stream<DisplayInfo>? changes,
     Duration finalizationTimeout = const Duration(milliseconds: 1100),
     Duration warmupDuration = const Duration(milliseconds: 500),
@@ -93,8 +89,7 @@ class RefreshRateSession {
     final session = RefreshRateSession._(name, info, expectedFps,
         clock ?? stableClock.now, finalizationTimeout, warmupDuration);
     session._clockSource = clock == null ? stableClock : null;
-    session._unsubscribe = FrameCollector.instance.subscribe(session._accept,
-        includeRenderingContext: includeRenderingContext);
+    session._unsubscribe = FrameCollector.instance.subscribe(session._accept);
     session._infoSubscription = changes?.listen(session.updateDisplayInfo);
     session._lifecycle = AppLifecycleListener(onStateChange: (state) {
       if (state == AppLifecycleState.resumed) {
@@ -173,32 +168,6 @@ class RefreshRateSession {
       'label': label,
       'tags': _tags
     }));
-  }
-
-  /// Records application readiness separately from the first observed frame.
-  void markReady() {
-    _checkOpen();
-    _readyAt ??= _now();
-    mark('application-ready');
-  }
-
-  /// Starts a next-observed-Flutter-frame latency proxy. Call in the actual
-  /// input callback. This does not prove that the frame contains the response,
-  /// and never measures physical touch-to-photon latency.
-  void markInteraction(String label) {
-    _checkOpen();
-    if (label.length > 256) throw ArgumentError('Interaction label too long');
-    if (_interactions.length == 100) {
-      _interactions.removeAt(0);
-      _droppedInteractions++;
-    }
-    _interactions.add({
-      'label': label,
-      'inputAt': _now().toIso8601String(),
-      'frameAt': null,
-      'nextFrameLatencyMs': null,
-      'tags': _tags
-    });
   }
 
   /// Excludes subsequent frame events until explicit resume.
@@ -294,18 +263,6 @@ class RefreshRateSession {
         _tracker.breakSegment();
       }
       _lastAcceptedSegment = segment;
-      _firstFrame ??= sample.timestamp;
-      for (final interaction in _interactions) {
-        if (interaction['frameAt'] != null) continue;
-        final inputAt = DateTime.parse(interaction['inputAt']! as String);
-        // Do not correlate across excluded lifecycle/target segments.
-        if (inputAt.isBefore(segment.start)) continue;
-        if (!sample.timestamp.isBefore(inputAt)) {
-          interaction['frameAt'] = sample.timestamp.toIso8601String();
-          interaction['nextFrameLatencyMs'] =
-              sample.timestamp.difference(inputAt).inMicroseconds / 1000;
-        }
-      }
       _tracker.addSample(FrameSample(
           buildUs: sample.buildUs,
           rasterUs: sample.rasterUs,
@@ -314,7 +271,6 @@ class RefreshRateSession {
           timestamp: sample.timestamp,
           hasEventTime: sample.hasEventTime,
           timestampSource: sample.timestampSource,
-          renderingContext: sample.renderingContext,
           targetHz: segment.targetHz,
           tags: segment.tags));
     }
@@ -384,21 +340,6 @@ class RefreshRateSession {
         segments: List.unmodifiable(
             _segments.map((s) => Map<String, Object?>.unmodifiable(s.toMap()))),
         markers: List.unmodifiable(_markers),
-        milestones: {
-          'firstObservedFlutterFrameAt': _firstFrame?.toIso8601String(),
-          'firstObservedFlutterFrameMs': _firstFrame == null
-              ? null
-              : _firstFrame!.difference(_startedAt).inMicroseconds / 1000,
-          'applicationReadyAt': _readyAt?.toIso8601String(),
-          'applicationReadyMs': _readyAt == null
-              ? null
-              : _readyAt!.difference(_startedAt).inMicroseconds / 1000,
-          'clockDiscontinuity': clockChanged,
-          'inputProxyDefinition':
-              'Input callback to next observed Flutter frame within the same active segment; response content and physical presentation are unverified.',
-          'droppedInteractions': _droppedInteractions,
-          'interactions': List.unmodifiable(
-              _interactions.map((m) => Map<String, Object?>.unmodifiable(m))),
-        });
+        clockDiscontinuity: clockChanged);
   }
 }

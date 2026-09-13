@@ -27,6 +27,27 @@ List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty
   return <Object?>[error.code, error.message, error.details];
 }
 
+enum NativePreferenceKind {
+  system,
+  high,
+  category,
+  content,
+  atLeast,
+}
+
+enum NativeSwitchStrategy {
+  seamlessOnly,
+  allowNonSeamless,
+}
+
+enum NativeRequestStatus {
+  submitted,
+  unsupported,
+  unavailable,
+  failed,
+  superseded,
+}
+
 class DisplayInfoMessage {
   DisplayInfoMessage({
     this.currentRate,
@@ -108,6 +129,255 @@ class DisplayInfoMessage {
   }
 }
 
+class PreferenceMessage {
+  PreferenceMessage({
+    this.kind,
+    this.fps,
+    this.category,
+    this.strategy,
+  });
+
+  NativePreferenceKind? kind;
+
+  double? fps;
+
+  int? category;
+
+  NativeSwitchStrategy? strategy;
+
+  Object encode() {
+    return <Object?>[
+      kind,
+      fps,
+      category,
+      strategy,
+    ];
+  }
+
+  static PreferenceMessage decode(Object result) {
+    result as List<Object?>;
+    return PreferenceMessage(
+      kind: result[0] as NativePreferenceKind?,
+      fps: result[1] as double?,
+      category: result[2] as int?,
+      strategy: result[3] as NativeSwitchStrategy?,
+    );
+  }
+}
+
+class RequestResultMessage {
+  RequestResultMessage({
+    this.status,
+    this.backend,
+    this.scope,
+    this.message,
+    this.preference,
+    this.observedAtMs,
+  });
+
+  NativeRequestStatus? status;
+
+  String? backend;
+
+  String? scope;
+
+  String? message;
+
+  PreferenceMessage? preference;
+
+  int? observedAtMs;
+
+  Object encode() {
+    return <Object?>[
+      status,
+      backend,
+      scope,
+      message,
+      preference,
+      observedAtMs,
+    ];
+  }
+
+  static RequestResultMessage decode(Object result) {
+    result as List<Object?>;
+    return RequestResultMessage(
+      status: result[0] as NativeRequestStatus?,
+      backend: result[1] as String?,
+      scope: result[2] as String?,
+      message: result[3] as String?,
+      preference: result[4] as PreferenceMessage?,
+      observedAtMs: result[5] as int?,
+    );
+  }
+}
+
+class CapabilitiesMessage {
+  CapabilitiesMessage({
+    this.query,
+    this.surfaceVoting,
+    this.windowPreferences,
+    this.categoryHints,
+    this.engineControl,
+    this.presentationObservation,
+    this.atLeast,
+    this.contentMatching,
+    this.touchBoost,
+    this.callbackObservation,
+  });
+
+  bool? query;
+
+  bool? surfaceVoting;
+
+  bool? windowPreferences;
+
+  bool? categoryHints;
+
+  bool? engineControl;
+
+  bool? presentationObservation;
+
+  bool? atLeast;
+
+  bool? contentMatching;
+
+  bool? touchBoost;
+
+  bool? callbackObservation;
+
+  Object encode() {
+    return <Object?>[
+      query,
+      surfaceVoting,
+      windowPreferences,
+      categoryHints,
+      engineControl,
+      presentationObservation,
+      atLeast,
+      contentMatching,
+      touchBoost,
+      callbackObservation,
+    ];
+  }
+
+  static CapabilitiesMessage decode(Object result) {
+    result as List<Object?>;
+    return CapabilitiesMessage(
+      query: result[0] as bool?,
+      surfaceVoting: result[1] as bool?,
+      windowPreferences: result[2] as bool?,
+      categoryHints: result[3] as bool?,
+      engineControl: result[4] as bool?,
+      presentationObservation: result[5] as bool?,
+      atLeast: result[6] as bool?,
+      contentMatching: result[7] as bool?,
+      touchBoost: result[8] as bool?,
+      callbackObservation: result[9] as bool?,
+    );
+  }
+}
+
+class DiagnosticsMessage {
+  DiagnosticsMessage({
+    this.source,
+    this.displayId,
+    this.scope,
+    this.currentHz,
+    this.maximumHz,
+    this.suggestedNormalHz,
+    this.suggestedHighHz,
+    this.callbackHz,
+    this.expectedCallbackHz,
+    this.sampleCount,
+    this.windowUs,
+    this.activityAttached,
+    this.surfaceAvailable,
+    this.touchBoostEnabled,
+    this.lastNativeRequest,
+    this.targetGeneration,
+    this.submissionCount,
+  });
+
+  String? source;
+
+  String? displayId;
+
+  String? scope;
+
+  double? currentHz;
+
+  double? maximumHz;
+
+  double? suggestedNormalHz;
+
+  double? suggestedHighHz;
+
+  double? callbackHz;
+
+  double? expectedCallbackHz;
+
+  int? sampleCount;
+
+  int? windowUs;
+
+  bool? activityAttached;
+
+  bool? surfaceAvailable;
+
+  bool? touchBoostEnabled;
+
+  RequestResultMessage? lastNativeRequest;
+
+  int? targetGeneration;
+
+  int? submissionCount;
+
+  Object encode() {
+    return <Object?>[
+      source,
+      displayId,
+      scope,
+      currentHz,
+      maximumHz,
+      suggestedNormalHz,
+      suggestedHighHz,
+      callbackHz,
+      expectedCallbackHz,
+      sampleCount,
+      windowUs,
+      activityAttached,
+      surfaceAvailable,
+      touchBoostEnabled,
+      lastNativeRequest,
+      targetGeneration,
+      submissionCount,
+    ];
+  }
+
+  static DiagnosticsMessage decode(Object result) {
+    result as List<Object?>;
+    return DiagnosticsMessage(
+      source: result[0] as String?,
+      displayId: result[1] as String?,
+      scope: result[2] as String?,
+      currentHz: result[3] as double?,
+      maximumHz: result[4] as double?,
+      suggestedNormalHz: result[5] as double?,
+      suggestedHighHz: result[6] as double?,
+      callbackHz: result[7] as double?,
+      expectedCallbackHz: result[8] as double?,
+      sampleCount: result[9] as int?,
+      windowUs: result[10] as int?,
+      activityAttached: result[11] as bool?,
+      surfaceAvailable: result[12] as bool?,
+      touchBoostEnabled: result[13] as bool?,
+      lastNativeRequest: result[14] as RequestResultMessage?,
+      targetGeneration: result[15] as int?,
+      submissionCount: result[16] as int?,
+    );
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -116,8 +386,29 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    }    else if (value is DisplayInfoMessage) {
+    }    else if (value is NativePreferenceKind) {
       buffer.putUint8(129);
+      writeValue(buffer, value.index);
+    }    else if (value is NativeSwitchStrategy) {
+      buffer.putUint8(130);
+      writeValue(buffer, value.index);
+    }    else if (value is NativeRequestStatus) {
+      buffer.putUint8(131);
+      writeValue(buffer, value.index);
+    }    else if (value is DisplayInfoMessage) {
+      buffer.putUint8(132);
+      writeValue(buffer, value.encode());
+    }    else if (value is PreferenceMessage) {
+      buffer.putUint8(133);
+      writeValue(buffer, value.encode());
+    }    else if (value is RequestResultMessage) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
+    }    else if (value is CapabilitiesMessage) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.encode());
+    }    else if (value is DiagnosticsMessage) {
+      buffer.putUint8(136);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -127,8 +418,25 @@ class _PigeonCodec extends StandardMessageCodec {
   @override
   Object? readValueOfType(int type, ReadBuffer buffer) {
     switch (type) {
-      case 129: 
+      case 129:
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : NativePreferenceKind.values[value];
+      case 130:
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : NativeSwitchStrategy.values[value];
+      case 131:
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : NativeRequestStatus.values[value];
+      case 132:
         return DisplayInfoMessage.decode(readValue(buffer)!);
+      case 133:
+        return PreferenceMessage.decode(readValue(buffer)!);
+      case 134:
+        return RequestResultMessage.decode(readValue(buffer)!);
+      case 135:
+        return CapabilitiesMessage.decode(readValue(buffer)!);
+      case 136:
+        return DiagnosticsMessage.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -172,6 +480,163 @@ class RefreshRateHostApi {
       );
     } else {
       return (pigeonVar_replyList[0] as DisplayInfoMessage?)!;
+    }
+  }
+
+  Future<CapabilitiesMessage> getCapabilities() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.getCapabilities$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as CapabilitiesMessage?)!;
+    }
+  }
+
+  Future<DiagnosticsMessage> getDiagnostics() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.getDiagnostics$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as DiagnosticsMessage?)!;
+    }
+  }
+
+  Future<RequestResultMessage> submitPreference(PreferenceMessage preference) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.submitPreference$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[preference]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as RequestResultMessage?)!;
+    }
+  }
+
+  Future<RequestResultMessage> resetTouchBoost() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.resetTouchBoost$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as RequestResultMessage?)!;
+    }
+  }
+
+  Future<bool> startObservation() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.startObservation$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as bool?)!;
+    }
+  }
+
+  Future<void> stopObservation() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.stopObservation$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(null) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
     }
   }
 

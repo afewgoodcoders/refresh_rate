@@ -17,7 +17,8 @@ class OverlayController {
   _OverlayMode _mode = _OverlayMode.none;
   final _tracker = FpsTracker();
   void Function()? _unsubscribe;
-  StreamSubscription<Object?>? _changes;
+  StreamSubscription<Object?>? _changes, _decisions;
+  double? _expectedFps;
   Timer? _update, _stale;
   int _generation = 0;
   bool _isStale = true;
@@ -27,13 +28,15 @@ class OverlayController {
   bool get isVisible => _entry != null;
 
   /// Shows a throttled Flutter cadence badge.
-  void showFPS() => _show(_OverlayMode.fps);
+  void showFPS({double? expectedFps}) =>
+      _show(_OverlayMode.fps, expectedFps: expectedFps);
 
   /// Shows native display information without subscribing to frame timings.
   void showHz() => _show(_OverlayMode.hz);
 
   /// Shows source-qualified rates and phase timing diagnostics.
-  void showFull() => _show(_OverlayMode.full);
+  void showFull({double? expectedFps}) =>
+      _show(_OverlayMode.full, expectedFps: expectedFps);
 
   /// Removes the overlay and cancels queued insertions and observers.
   void hide() {
@@ -44,6 +47,8 @@ class OverlayController {
     _unsubscribe = null;
     _changes?.cancel();
     _changes = null;
+    _decisions?.cancel();
+    _decisions = null;
     _entry?.remove();
     _entry?.dispose();
     _entry = null;
@@ -53,8 +58,12 @@ class OverlayController {
     _isStale = true;
   }
 
-  void _show(_OverlayMode mode) {
+  void _show(_OverlayMode mode, {double? expectedFps}) {
+    if (expectedFps != null && (!expectedFps.isFinite || expectedFps <= 0)) {
+      throw ArgumentError.value(expectedFps, 'expectedFps');
+    }
     hide();
+    _expectedFps = expectedFps;
     _mode = mode;
     final generation = _generation;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -69,12 +78,17 @@ class OverlayController {
                 _OverlayMode.fps =>
                   FpsOverlayWidget(tracker: _tracker, stale: _isStale),
                 _OverlayMode.hz => HzOverlayWidget(tracker: _tracker),
-                _OverlayMode.full =>
-                  FullOverlayWidget(tracker: _tracker, stale: _isStale),
+                _OverlayMode.full => FullOverlayWidget(
+                    tracker: _tracker,
+                    stale: _isStale,
+                    expectedFps: _expectedFps),
                 _OverlayMode.none => const SizedBox.shrink(),
               });
       overlay.insert(_entry!);
       _changes = RefreshRate.onChanged.listen((_) => _scheduleUpdate());
+      if (mode == _OverlayMode.full) {
+        _decisions = RefreshRate.onDecision.listen((_) => _scheduleUpdate());
+      }
       RefreshRate.refresh().catchError((Object _) => RefreshRate.info);
       if (mode != _OverlayMode.hz) {
         _unsubscribe = FrameCollector.instance.subscribe((frames) {
@@ -82,7 +96,15 @@ class OverlayController {
           if (frames.length < 2) return;
           if (_isStale) _tracker.reset();
           for (final frame in frames) {
-            _tracker.addSample(frame);
+            _tracker.addSample(FrameSample(
+                buildUs: frame.buildUs,
+                rasterUs: frame.rasterUs,
+                totalUs: frame.totalUs,
+                vsyncUs: frame.vsyncUs,
+                timestamp: frame.timestamp,
+                hasEventTime: frame.hasEventTime,
+                timestampSource: frame.timestampSource,
+                targetHz: _expectedFps));
           }
           _isStale = false;
           _scheduleUpdate();
@@ -104,7 +126,9 @@ class OverlayController {
       if (generation != _generation) return;
       final signature = '$_isStale:${_tracker.recentFps().round()}:'
           '${_tracker.avgBuildMs.toStringAsFixed(1)}:${_tracker.avgRasterMs.toStringAsFixed(1)}:'
-          '${RefreshRate.info}:${RefreshRate.info.isStale}';
+          '${RefreshRate.info}:${RefreshRate.info.isStale}:'
+          '${RefreshRate.requestedPreference.toMap()}:$_expectedFps:'
+          '${_tracker.phaseOverruns}:${_tracker.budgetedFrameCount}';
       if (signature != _signature) {
         _signature = signature;
         _entry?.markNeedsBuild();

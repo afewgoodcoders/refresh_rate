@@ -19,7 +19,7 @@ abstract class SessionScorer {
     bool debugBuild = kDebugMode,
     List<Map<String, Object?>> segments = const [],
     List<Map<String, Object?>> markers = const [],
-    Map<String, Object?> milestones = const {},
+    bool clockDiscontinuity = false,
   }) {
     final targetKnown = targetHz.isFinite && targetHz > 0;
     final count = tracker.budgetedFrameCount;
@@ -88,7 +88,7 @@ abstract class SessionScorer {
         deviceState: deviceState,
         frameCount: tracker.sampleCount,
         stutters: tracker.stutters.toMap(),
-        milestones: milestones,
+        clockDiscontinuity: clockDiscontinuity,
         expectedWorkloadFrameCount: expectedWorkloadFrameCount,
         intervalCount: tracker.intervals.count,
         budgetedFrameCount: count,

@@ -44,13 +44,13 @@ final result = await lease.ready;
 await lease.release(); // idempotent; does not clear another owner's preference
 ```
 
-Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
+Higher priority wins, with newer requests breaking ties. Temporary boosts use expiring leases. Backend submissions are serialized, and superseded results are identified explicitly. Unchanged successful preferences are reused without a native write (`result.reused`); failures remain retryable. Native attachment/recreation reapplies the active preference to its new target. Custom backends can use `controller.reconcile(force: true)` when their target changes. `disable()` and `preferDefault()` release the imperative owner; they preserve independent scopes and content requests.
 
 ## Platform support
 
 | Platform | Queries | Control |
 |---|---|---|
-| Android | Active display rate/modes, power/thermal state, API 30 thermal headroom, API 36 ARR evidence and suggested rates | Qualified live FlutterSurfaceView vote; explicit window fallback for ordinary high-rate preferences. API 35 categories/touch boost and API 24 sustained mode where supported. Fixed-source/at-least requests require a surface that supports their semantics. |
+| Android | Active display rate/modes, power/thermal state, API 36 ARR evidence and suggested rates | Qualified live FlutterSurfaceView vote; explicit window fallback for ordinary high-rate preferences. API 35 categories and touch boost where supported. Fixed-source/at-least requests require a surface that supports their semantics. |
 | iOS | Screen maximum, power/thermal state; explicit bounded display-link observation | Flutter-engine control is unsupported. No process-wide swizzling or forced default 60 FPS cap. |
 | macOS | App window's display/modes, thermal state and supported low-power state | Flutter-engine control is unsupported; the plugin does not pretend a helper display link controls Flutter. |
 | Windows | App window's monitor and display path | Query only. |
@@ -59,7 +59,7 @@ Higher priority wins, with newer requests breaking ties. Temporary boosts use ex
 
 `RefreshRate.capabilities()` reports per-operation support. Results distinguish `submitted`, `unsupported`, `unavailable`, `failed`, and `superseded`. The native surface backend currently scopes content votes to the Flutter surface; it does not acquire or control an arbitrary video plugin's private playback surface.
 
-Sessions, reports, stutter analysis, quality advice and telemetry use shared Dart code across all six platforms. Native health data and scheduling controls are available only where the backend supports them. Quality advice can use Flutter phase timings even without a native thermal source.
+Sessions, reports, stutter analysis, diagnostic exports use shared Dart code across all six platforms. Native health data and scheduling controls are available only where the backend supports them.
 
 Android API 36 support uses `Display.hasArrSupport()`, display-defined suggested normal/high rates, and `FRAME_RATE_COMPATIBILITY_AT_LEAST`. High preferences use the display-suggested high rate when available. Surface lookup is matched to the registering Flutter engine; window fallback is refused if it would affect a different engine. Control preserves resolution rather than silently selecting a different-resolution mode. Supported SDK paths still require physical-device qualification for OEM, composition, and lifecycle behavior.
 
@@ -83,12 +83,13 @@ RefreshRateScope(
 
 Nested scopes arbitrate by depth. Background apps, inactive routes and disabled `TickerMode` release their preferences. Set `active: false` for custom hidden tabs that do not expose visibility through routes or TickerMode.
 
-For animations, attach `RefreshRate.boostDuring(controller)` and retain its returned disposer. Call that disposer before disposing the animation controller. Running, repeating and reverse animations are supported.
+For animations, attach `RefreshRate.boostDuring(controller)` and retain its returned disposer. Call that disposer before disposing the animation controller. Running, repeating and reverse animations are supported. `AnimationController.stop()` sends no value/status notification, so the adapter checks for stops every 32 ms while it owns a running animation. That check releases the request and stops itself; it never schedules Flutter frames. Restarting the animation can reacquire the request.
 
 ## Opt-in automatic policies
 
 ```dart
 final policy = RefreshRate.auto(policy: RefreshRatePolicy.balanced);
+await policy.ready; // Initial device state and capabilities have been read.
 
 RefreshRateInteraction(
   controller: policy,
@@ -106,7 +107,7 @@ The interaction widget reports pointer activity and scrolling, including ballist
 - `performance`: high during activity, with twice the configured idle grace period.
 - `battery`: normal-category preference during activity where supported, then release. Unsupported backends keep system policy.
 
-Policies release their requests in the background and under reported low-power/serious-thermal constraints. Explicit higher-priority requests remain independently owned. No FPS feedback loop continuously produces frames or keeps increasing the requested rate. Energy/performance gains are not asserted without measurements.
+The facade starts with system scheduling until initial display/power/thermal state and capabilities are read. A failed initial read leaves the policy at system scheduling. Policies release their requests in the background and under reported low-power/serious-thermal constraints. Explicit higher-priority requests remain independently owned. No FPS feedback loop continuously produces frames or keeps increasing the requested rate. Energy/performance gains are not asserted without measurements.
 
 ## Exact content rates
 
@@ -192,13 +193,19 @@ Gates require sufficient samples, known workload coverage, non-debug builds and 
 
 JSON and CSV remain available with report schema version 2. Legacy `missedFramePercent` is an alias for phase overruns, not a count of physically missed frames. `observedAvgHz` is null for timing-only sessions.
 
-## Overlays and optional telemetry
+## Budget-aware overlays
 
-`showFPS()`, `showHz()`, `showOverlay()` and `hideOverlay()` remain available. Updates are event-driven and throttled; Hz-only does not subscribe to Flutter timings or run a ticker. A graph shows recent pipeline latency. Single-record batches are not used to sustain overlay refresh loops, so sparse activity can display idle/stale. Benchmark with the overlay off.
+```dart
+RefreshRate.showOverlay(expectedFps: 120);
+// Optional compact badges:
+RefreshRate.showFPS(expectedFps: 120);
+RefreshRate.showHz();
+RefreshRate.hideOverlay();
+```
 
-`FrameTelemetry` sends sampled, bounded batches to an application-provided asynchronous sink. It tracks drops and failures, limits concurrent exports and disables further export after a sink timeout. It configures no network destination. Dispose it when unused.
+The full overlay separates the requested preference (including numeric content FPS), OS-reported display Hz, explicit workload FPS and budget, Flutter cadence, and phase-budget overruns. For a 120 FPS workload the budget is 8.33 ms. Omitting `expectedFps` displays an unknown workload/budget; display capability is never substituted for application intent.
 
-`RefreshRateTrace` optionally emits request decisions to the Dart timeline and registers the read-only `ext.refresh_rate.diagnostics` service extension for DevTools clients. This is an integration endpoint, not a standalone DevTools extension UI.
+Updates are event-driven and throttled, including request decisions while the app is otherwise idle. Hz-only mode does not subscribe to Flutter timings. A graph shows recent pipeline latency and the declared workload budget. Single-record batches do not sustain repaint loops, so sparse activity can display idle/stale. Keep the overlay off when measuring the application itself; use the separate overhead experiment when measuring the observer.
 
 ## Configuration and diagnostic bundles
 
@@ -229,129 +236,90 @@ final json = bundle.toJson(); // Save/share only through your application.
 
 The bundle includes capabilities, source-qualified observations, recent decisions and reproduction context, plus bounded frame evidence when a session report is supplied. Oversized exports fail explicitly. Native observations are associated with the preceding decisions without claiming that a request was fulfilled or caused a change.
 
-`JsonFrameTelemetry` applies the same filtering to sampled batches, with one JSON batch per line:
+Exports allow all tags by default. Supply an allowlist and redaction callback for your application's context; the default bundle limit is 262,144 UTF-8 bytes. Export-size failures are explicit, and the package configures no network destination. Completed reports support JSON, CSV, Markdown and one-report-per-line `toNdjson()`.
 
-```dart
-final telemetry = JsonFrameTelemetry(
-  sampleEvery: 10,
-  capacity: 256,
-  batchSize: 64,
-  policy: TelemetryExportPolicy(allowedTags: {'route', 'screen'}),
-  sink: (ndjson) async {
-    // Save the batch through your application's chosen storage or transport.
-  },
-);
-// Collect while the workload runs, then stop with its owner.
-await telemetry.dispose();
-```
+## Stutter episodes and workload context
 
-`exportedSamples` counts samples acknowledged by the sink before timeout. `failedSamples`, `failedBatches`, `droppedSamples` and `lastError` expose delivery problems. Disposal discards queued samples and waits for bounded in-flight work; `flush()` sends one batch when a final export is needed. Neither export API configures a network destination. Tags are all allowed by default; supply an allowlist and redaction callback for your application's context. The default export limit is 262,144 UTF-8 bytes per bundle or NDJSON batch.
+Session reports retain bounded cadence-gap episodes, recovery/interruption state, longest budgeted interval and full-session stall counts. A long stall must both exceed 1.5 workload budgets and last at least 100 ms. Work with no declared cadence is not classified against a guessed budget.
 
-## Stutters, milestones and report inspection
+Use `session.setTag()` and `session.mark()` for application-owned context. Target, power and thermal changes are exported as timestamped segments. Thermal degradation stays visible in the measured workload rather than being automatically excluded. Explicit pause/resume and background warmup delimit excluded periods. Session duration uses a monotonic clock; detected wall-clock discontinuities make event coverage incomplete.
 
-Session reports include consecutive cadence-gap episodes, recovery/interruption state, longest budgeted interval and long-stall counts. A long stall must both exceed 1.5 workload budgets and last at least 100 ms. Idle work with no expected cadence is not classified as a stutter workload.
-
-```dart
-final session = RefreshRate.startSession('checkout', expectedFps: 60,
-    includeRenderingContext: true);
-session.markInteraction('pay_tapped'); // Call in the actual input handler.
-session.markReady(); // Application-declared readiness, distinct from first frame.
-```
-
-`report.milestones` separates the first observed Flutter frame, readiness and input-to-next-observed-frame latency. The input proxy does not prove that the next frame contains the response, and is not touch-to-photon latency. `RefreshRateNavigatorObserver(session: () => activeSession)` adds named-route context to an app-owned session; supply its `routeName` mapper to sanitize route identifiers.
-
-`includeRenderingContext` opts into Flutter's layer/picture raster-cache counters, not heap or GPU-allocation profiling. It is also available on `FrameTelemetry`. Session time is anchored to a monotonic clock; detected wall-clock discontinuities make event coverage incomplete.
-
-`RefreshRateReportView(report: report, decisions: RefreshRate.decisionHistory)` displays recent build/raster/pipeline costs, workload budgets, percentiles, stutters and request history on a separate diagnostics route. It inspects completed evidence without starting a collector. `RefreshRateTrace.setSessionReport(report, policy: ...)` supplies a filtered report to the read-only `ext.refresh_rate.session` endpoint after a `RefreshRateTrace` instance has registered the extensions. This endpoint is not a standalone DevTools tab.
-
-## Shadow mode and application quality advice
-
-`RefreshRate.auto(shadowMode: true)` records proposed decisions in `history` and `decisions` without acquiring native requests. Capability-aware policies preserve system scheduling when their preference is unsupported.
+## Policy shadow mode
 
 ```dart
 final shadow = RefreshRate.auto(shadowMode: true);
+await shadow.ready;
 final activity = shadow.beginActivity();
 // Exercise the workload; inspect shadow.history or listen to shadow.decisions.
 shadow.endActivity(activity);
 await shadow.dispose();
 ```
 
-```dart
-final quality = RefreshRate.adviseQuality(
-  onRecommendation: (advice) {
-    // Your application decides whether to adjust effects or background work.
-  },
-);
-quality.setWorkload(60); // Explicitly active, continuous work.
-// Run the workload before stopping collection.
-quality.setWorkload(null); // Stop collecting during idle periods.
-await quality.dispose();
-```
+Shadow mode records bounded policy proposals without acquiring native preferences. Scopes and policies own preferences on the shared native surface/window; they do not give widget subtrees independent physical refresh rates.
 
-Quality advice uses consecutive phase-budget overruns, reported power/thermal state and sustained healthy-frame recovery. Missing frames do not establish recovery. Visual changes remain application-owned.
+## Touch-boost restoration
 
-## Android thermal and sustained workload support
+On Android API 35+, `setTouchBoost()` captures the prior native window setting. `resetTouchBoost()` restores it while still owned; activity recreation restores and reapplies the preference. Unsupported native calls report errors/results explicitly. This control is separate from temporary `boost()` leases and automatic activity policies.
 
 ```dart
-final headroom = await RefreshRate.thermalHeadroom(forecastSeconds: 10);
-print(headroom.value); // null means unavailable; zero is a valid reading.
-
-final sustained = RefreshRate.sustainedPerformance(
-  previousEnabled: false, // Your application's known prior window preference.
-  duration: const Duration(minutes: 10),
-);
-final outcome = await sustained.ready;
-print(outcome.status.name);
-// Run the sustained workload before releasing the lease.
-await sustained.release();
+final caps = await RefreshRate.capabilities();
+if (caps.touchBoost) {
+  await RefreshRate.setTouchBoost(true);
+  // Keep the preference only for the lifetime of its application owner.
+  final result = await RefreshRate.resetTouchBoost();
+  print(result.status.name);
+}
 ```
 
-Thermal headroom requires Android API 30; readings may be unavailable on individual devices. Zero is valid. Polling is limited to once per ten seconds across consumers. `watchThermalHeadroom()` is foreground-only and must be disposed. Forecasts require native warmup; cached values retain their observation time.
+## Example and integration tests
 
-An active quality controller can receive a fresh reading through `updateThermalHeadroom(headroom.value)`. Supplying null clears the optional reading. The controller does not start thermal-headroom polling automatically.
+The example initializes Flutter bindings, starts the app, and then inspects a refresh request after the first frame. Native registration can precede surface attachment; Android retains and reapplies the preference when its target becomes available. An unsupported plugin backend is distinct from a display that cannot run above 60 Hz.
 
-Sustained mode requires native device support and API 24. It requests consistency for long workloads and can reduce peak performance. Android exposes no public getter for the prior sustained state, so the application must supply its known baseline. Overlapping leases share that baseline; the final owner restores it. The application must coordinate this window-level mode with other plugins. Other platforms return unsupported.
+The example's **COMPARE DEFAULT / HIGH** action runs the same animation with the same explicit workload budget under both preferences, with the overlay disabled. Debug reports remain inconclusive for performance gates. Use profile mode on a physical device to compare costs and inspect power/thermal segments alongside the result.
 
-On API 35+, `setTouchBoost()` captures the prior native state. `resetTouchBoost()` restores it when still owned; activity recreation restores/reapplies the owned preference. Unsupported legacy calls report errors. Native attachment and deferred request outcomes are available in `diagnostics.nativeMetadata`.
+From `example/`, run the functional suite against a connected target:
 
-## Repeated-run comparisons
-
-`BenchmarkSeries(reports: runs, environmentKey: deviceBuildScenario)` compares at least three qualified runs against another series. `compareTo()` exposes per-run distributions and a caller-selected median regression gate. Missing coverage, incompatible workloads/environments and unusable zero baselines remain inconclusive. These are descriptive comparisons, not statistical-significance claims. Session reports also support one-report-per-line `toNdjson()` exports.
-
-```dart
-final baseline = BenchmarkSeries(
-  reports: baselineRuns,
-  environmentKey: comparisonEnvironment,
-);
-final current = BenchmarkSeries(
-  reports: currentRuns,
-  environmentKey: comparisonEnvironment,
-);
-final comparison = current.compareTo(
-  baseline,
-  metric: BenchmarkMetric.rasterP99,
-  maxRegressionPercent: 5,
-);
-print(comparison.passed);
-print(comparison.missingEvidence);
+```sh
+flutter test integration_test/refresh_rate_test.dart integration_test/example_workflow_test.dart -d <device-id>
 ```
 
-`baselineRuns` and `currentRuns` are lists of completed `SessionReport` objects from repeated executions. Use a matching environment key only when device, build configuration, renderer and workload are comparable. Other supported metrics are `flutterCadence` and `phaseOverrunPercent`; positive regression percentages mean worse results for the selected metric.
+From the package root, exercise actual Android Home/resume/rotation transitions:
+
+```sh
+python3 scripts/test_android_lifecycle.py --device <android-device-id>
+python3 scripts/test_android_power.py --device <android-device-id>
+```
+
+The power test starts with Battery Saver enabled and checks the native event when it is disabled. Thermal constraints still take precedence. The host scripts restore the device settings they change. If an OEM sleeps during installation with Battery Saver enabled, add `--after-launch`: the host enables it once the app is visible, before the automatic controller is created, while leaving the facade cache uninitialized.
+
+For paired overlay-off/on captures on a physical device, run from `example/`:
+
+```sh
+flutter drive --profile --dart-define=REQUIRE_PROFILE=true --driver=test_driver/refresh_rate.dart --target=integration_test/overlay_overhead_test.dart -d <device-id>
+```
+
+Unit tests cover deterministic metric and ownership edge cases. Integration tests use the registered plugin and actual Flutter frame callbacks. CI includes native integration jobs, browser execution and `python3 scripts/generate_bindings.py --check` to check all generated Pigeon bindings, including Linux GObject and both Apple source layouts.
 
 ## Upgrading from 1.0.2
 
-Version 1.0.3 includes API and measurement changes:
+Version 2.0.0 includes API and measurement changes:
 
-- Refresh-control methods return `RateRequestResult`. Update explicitly typed `Future<void>` wrappers and inspect the result before relying on a submitted preference.
+- Refresh-control methods that returned `void` now return `Future<RateRequestResult>`; `setTouchBoost()` returns `Future<void>`. Existing standalone invocations can still compile, but awaiting the call lets you inspect completion and handle errors. `boostDuring()` now returns a disposer that must be called before disposing its animation controller.
 - `disable()` and `preferDefault()` release the imperative request. Release each independently owned lease or dispose its scope/controller to remove those preferences.
 - The iOS display-link swizzle is removed. iOS and macOS engine-control requests report unsupported; queries and Flutter timing collection remain available.
 - Report schema version 2 separates Flutter cadence, phase overruns and pipeline latency. FPS lows use inter-frame intervals. Update consumers of the earlier metric definitions.
 - `observedAvgHz` is nullable. A timing-only session does not provide a native callback-rate observation. Legacy `missedFramePercent` means phase overruns, not physically missed frames.
 
-See the [1.0.3 changelog](CHANGELOG.md#103) for the release changes.
+- `SessionState.finalizing` is new; update exhaustive enum switches. Session scoring requires an explicit workload rate rather than assuming display maximum.
+- Unknown legacy numeric display rates use zero rather than a fabricated 60 Hz. Prefer nullable observation getters and guard divisions by rate.
+- `isProMotionReady` is deprecated. Use `isProMotionConfigured` for the plist setting and nullable `supportsHighRefreshRate` for reported display capability. Neither indicates a guaranteed engine cadence.
+
+See the [2.0.0 changelog](CHANGELOG.md#200) for the release changes.
 
 ## Current limits
 
-JankStats, MetricKit and native player-surface integrations are not bundled. There is no standalone DevTools inspector or independent per-window/scene measurement controller. Native View/HWUI counters and callback cadence do not automatically establish Flutter presentation metrics.
+The release focuses on refresh requests, diagnostics, the workload-budget overlay and benchmark sessions. Automatic route tagging, rich report viewers, DevTools extensions, streaming telemetry, repeated-run distributions, adaptive quality advice, sustained mode, thermal-headroom polling, raster-cache context and readiness/input proxies are outside the 2.0.0 public API. Manual session tags, diagnostic exports and single-report comparisons remain available.
 
-Windows and Linux runtime integration qualification remains outstanding. Physical presentation FPS, energy savings, sustained thermal performance and instrumentation overhead require physical-device measurements; functional integration tests do not establish those results.
+JankStats, MetricKit and private player-surface integrations are not bundled. Independent per-window/scene controllers and Flutter presentation telemetry require further integration. Apple engine control remains unsupported; removing the swizzle does not remove the device's high-refresh capability.
+
+Windows/Linux runtime results, physical refresh switching, energy savings, long thermal workloads and observer overhead must be qualified on their actual targets. Passing functional tests or emulator builds does not establish those physical performance results.

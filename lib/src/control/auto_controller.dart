@@ -88,6 +88,27 @@ class RefreshRateAutoController {
 
   /// Qualified operation support; unsupported battery categories fall back to system.
   RefreshRateCapabilities capabilities;
+
+  /// Completes once initial device state and capabilities have been read.
+  /// A failed read leaves automatic control at system scheduling.
+  Future<void> ready = Future.value();
+
+  /// Initializes a facade-created policy before allowing native requests.
+  void initialize(
+      Future<(DisplayInfo, RefreshRateCapabilities)> Function() read) {
+    capabilities = const RefreshRateCapabilities();
+    ready = (() async {
+      try {
+        final snapshot = await read();
+        if (_disposed) return;
+        _info = snapshot.$1;
+        updateCapabilities(snapshot.$2);
+      } catch (_) {
+        if (!_disposed) updateCapabilities(const RefreshRateCapabilities());
+      }
+    })();
+  }
+
   final _proposals = Queue<PolicyDecision>();
   final _decisions = StreamController<PolicyDecision>.broadcast();
   RatePreference? _lastProposal;

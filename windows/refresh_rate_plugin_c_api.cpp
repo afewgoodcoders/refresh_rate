@@ -37,7 +37,32 @@ class RefreshRatePlugin : public flutter::Plugin, public RefreshRateHostApi {
   std::optional<FlutterError> MatchContent(double fps) override { return std::nullopt; }
   std::optional<FlutterError> Boost(int64_t duration_ms) override { return std::nullopt; }
   std::optional<FlutterError> SetCategory(int64_t category_index) override { return std::nullopt; }
-  std::optional<FlutterError> SetTouchBoost(bool enabled) override { return std::nullopt; }
+  std::optional<FlutterError> SetTouchBoost(bool enabled) override { return FlutterError("unsupported", "Touch boost is unavailable on Windows"); }
+  ErrorOr<CapabilitiesMessage> GetCapabilities() override {
+    CapabilitiesMessage result; result.set_query(true); return result;
+  }
+  ErrorOr<DiagnosticsMessage> GetDiagnostics() override {
+    DiagnosticsMessage result;
+    result.set_source("windowsDisplayConfig");
+    result.set_scope("applicationMonitor");
+    const double rate = GetCurrentRate();
+    if (rate > 0) result.set_current_hz(rate);
+    return result;
+  }
+  ErrorOr<RequestResultMessage> SubmitPreference(const PreferenceMessage& preference) override {
+    const bool clear = preference.kind() && *preference.kind() == NativePreferenceKind::kSystem;
+    RequestResultMessage result;
+    result.set_status(clear ? NativeRequestStatus::kSubmitted : NativeRequestStatus::kUnsupported);
+    result.set_backend(clear ? "clearOwnedPreference" : "unavailable");
+    result.set_scope("applicationMonitor"); result.set_preference(preference);
+    return result;
+  }
+  ErrorOr<RequestResultMessage> ResetTouchBoost() override {
+    RequestResultMessage result; result.set_status(NativeRequestStatus::kUnsupported);
+    result.set_backend("unavailable"); result.set_scope("applicationMonitor"); return result;
+  }
+  ErrorOr<bool> StartObservation() override { return false; }
+  std::optional<FlutterError> StopObservation() override { return std::nullopt; }
   ErrorOr<bool> IsSupported() override { return false; }
 
  private:

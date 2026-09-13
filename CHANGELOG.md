@@ -1,22 +1,21 @@
 # Changelog
 
-## 1.0.3
+## 2.0.0
 
-- Fixed FPS lows to use frame intervals instead of pipeline duration, and kept benchmark statistics for the full session.
-- Added session pause/resume handling, workload targets and display context. Session durations use monotonic time; detected clock discontinuities make coverage incomplete.
-- Added stutter episodes and recovery tracking, route tags, readiness and input-to-next-frame markers, and optional raster-cache context. Separated UI/raster overruns from pipeline latency and frame cadence.
-- Added awaitable refresh requests with independent ownership, scopes, activity-based policies and content-rate preferences. Repeated playback updates return the current backend result.
-- Added policy shadow mode and application-owned quality advice with pressure/recovery thresholds. Unsupported policy preferences fall back to system scheduling.
-- Added Android surface voting, API 35 category hints and API 36 ARR/at-least support. High-rate requests use supported display suggestions. Surface requests match the registering engine, and diagnostics include deferred request outcomes.
-- Added Android thermal-headroom observations and foreground polling, plus independently owned sustained-performance requests with a caller-supplied restoration baseline. Touch-boost preferences restore their captured state on reset/detachment and reapply after recreation.
-- Removed the iOS display-link swizzle. Engine-control requests on iOS and macOS now report unsupported; display queries and Flutter frame measurements remain available.
-- Fixed iOS display lookup after engine attachment, desktop monitor selection, web frame timestamps and short callback-rate observations. Added macOS power/thermal observations.
-- Added configuration checks, bounded diagnostic bundles and a completed-session report viewer. Replaced continuous overlay tickers with event-driven updates and added a completed-session service endpoint for DevTools clients.
-- Added JSON/CSV/Markdown reports, NDJSON telemetry, embedded metric definitions, tag allowlists, redaction, export-size limits and sink delivery counters.
-- Added benchmark thresholds and repeated-run comparisons with workload, coverage and environment checks.
-- Added platform build checks, real-plugin integration tests, Android Home/resume/rotation coverage and Apple source-parity checks. Fixed example compatibility with Flutter 3.24.
+- Corrected FPS lows to use frame intervals and kept benchmark aggregates for the full session. Added separate phase overruns, pipeline latency, cadence gaps, stutter episodes and recovery evidence.
+- Added explicit workload budgets, pause/resume, timestamped tags and markers, monotonic session duration and complete-boundary checks. Power and thermal transitions remain visible in session segments.
+- Added awaitable refresh results, independently owned requests, timed boosts, optional scopes/activity policies and fractional content preferences. Unchanged successful requests no longer repeat native writes; failed requests can retry.
+- Fixed animation boosts surviving `AnimationController.stop()`. The adapter supports reuse and returns an explicit disposer.
+- Automatic policies now read initial device state and capabilities before requesting a rate. Failed initialization preserves system scheduling. Added policy shadow mode.
+- Added Android surface voting, API 35 categories and API 36 ARR/at-least support, using suggested high rates where available. Surface requests match the registering engine and reapply after attachment/recreation. Touch-boost reset restores the captured native setting.
+- Removed the iOS display-link swizzle. Apple engine-control requests explicitly report unsupported; display queries and Flutter timing measurements remain available. Separated ProMotion plist configuration from high-refresh capability.
+- Fixed late iOS view attachment, desktop monitor queries and browser timing clocks/short observations. Added macOS power and thermal notifications.
+- Added configuration diagnostics, bounded diagnostic bundles, filtering/redaction and export-size limits. Expanded JSON/CSV reports and added Markdown/NDJSON exports, metric definitions, comparison checks and benchmark thresholds.
+- Restored numeric workload targets and budgets in the overlay, alongside requested content FPS, display Hz and Flutter phase overruns. Request decisions update the overlay even without display events; updates remain throttled and event-driven.
+- Moved all native operations to generated Pigeon messages, including Linux GObject bindings. Added regeneration checks and native/browser integration jobs to CI.
+- Added a controlled system-default versus requested-high example, Android OS lifecycle/Battery Saver tests and separate paired overlay-overhead captures.
 
-**Breaking changes:** Control methods now return request results, reset methods preserve independently owned requests, and report metrics use revised definitions with schema version 2. `observedAvgHz` is nullable. See [Upgrading from 1.0.2](README.md#upgrading-from-102) for migration notes.
+**Breaking changes:** Existing controls now return futures/results, resets preserve independently owned requests, `boostDuring()` requires disposal, `observedAvgHz` is nullable, session states include `finalizing`, and report schema version 2 uses revised metric definitions. Unknown display values no longer assume 60 Hz. See [Upgrading from 1.0.2](README.md#upgrading-from-102).
 
 ## 1.0.2
 

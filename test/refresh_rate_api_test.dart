@@ -8,7 +8,8 @@ class FakeHostApi implements RefreshRateApiAdapter, RefreshRateRequestAdapter {
   final calls = <RatePreference>[];
   Completer<DisplayInfoMessage>? fetch;
   @override
-  DisplayInfoMessage getDisplayInfo() =>
+  FutureOr<DisplayInfoMessage> getDisplayInfo() =>
+      fetch?.future ??
       DisplayInfoMessage(currentRate: 120, maxRate: 120, thermalStateIndex: 0);
   @override
   Future<RefreshRateCapabilities> capabilities() async =>
@@ -22,6 +23,10 @@ class FakeHostApi implements RefreshRateApiAdapter, RefreshRateRequestAdapter {
         backend: 'fakeSurface',
         scope: 'test');
   }
+
+  @override
+  Future<RateRequestResult> resetTouchBoost() async => const RateRequestResult(
+      status: RequestStatus.unsupported, preference: RatePreference.system());
 
   @override
   void enable() {}

@@ -37,6 +37,7 @@ void main() {
     await waitFor(() => states.last == AppLifecycleState.resumed);
     await waitFor(() => session.state == SessionState.running);
     expect(RefreshRate.requestedPreference.kind, PreferenceKind.high);
+    final beforeRotation = (await RefreshRate.diagnostics()).nativeMetadata;
     final size = tester.view.physicalSize;
     debugPrint('REFRESH_RATE_HOST_ROTATE');
     await waitFor(() => tester.view.physicalSize != size);
@@ -44,6 +45,18 @@ void main() {
         await RefreshRate.controller.reconcile(reason: 'rotationTest');
     expect(request.status, RequestStatus.submitted);
     expect(request.backend, 'flutterSurface');
+    final native = (await RefreshRate.diagnostics()).nativeMetadata;
+    expect(native['activityAttached'], true);
+    expect(native['surfaceAvailable'], true);
+    final lastNative = native['lastNativeRequest'] as Map;
+    expect(lastNative['status'], 'submitted');
+    expect(lastNative['backend'], 'flutterSurface');
+    expect((lastNative['preference'] as Map)['kind'], 'high');
+    if (native['targetGeneration'] != beforeRotation['targetGeneration']) {
+      expect(native['submissionCount'] as num,
+          greaterThan(beforeRotation['submissionCount'] as num));
+    }
+    debugPrint('LIFECYCLE_NATIVE: $native');
     final report = await session.end();
     expect(report.exclusionReasons[ExclusionReason.appBackgrounded],
         greaterThan(0));

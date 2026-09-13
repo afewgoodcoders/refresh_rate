@@ -9,8 +9,6 @@ import 'dart:ui' as ui;
 import 'models/rate_diagnostics.dart';
 import 'control/rate_controller.dart';
 import 'control/auto_controller.dart';
-import 'control/quality_controller.dart';
-import 'control/native_performance.dart';
 import 'package:flutter/widgets.dart';
 
 import 'generated/refresh_rate_api.g.dart';
@@ -338,11 +336,27 @@ class RefreshRate {
   /// Attach until explicitly disposed. Supports running/repeating/reverse animations.
   static VoidCallback boostDuring(AnimationController animation) {
     RefreshRateLease? lease;
+    Timer? stopCheck;
+    var disposed = false;
     void update() {
+      if (disposed) return;
       if (animation.isAnimating) {
         lease ??= request(const RatePreference.high(),
             owner: 'animation', priority: 150);
+        // AnimationController.stop() sends no value/status notification.
+        // Poll only while this adapter owns a running animation; this timer
+        // never schedules Flutter frames and ends as soon as it observes stop.
+        stopCheck ??= Timer.periodic(const Duration(milliseconds: 32), (_) {
+          if (!animation.isAnimating) {
+            stopCheck?.cancel();
+            stopCheck = null;
+            lease?.release();
+            lease = null;
+          }
+        });
       } else {
+        stopCheck?.cancel();
+        stopCheck = null;
         lease?.release();
         lease = null;
       }
@@ -352,10 +366,10 @@ class RefreshRate {
     animation.addStatusListener(status);
     animation.addListener(update);
     update();
-    var disposed = false;
     return () {
       if (disposed) return;
       disposed = true;
+      stopCheck?.cancel();
       animation.removeStatusListener(status);
       animation.removeListener(update);
       lease?.release();
@@ -382,57 +396,35 @@ class RefreshRate {
         idleDelay: idleDelay,
         capabilities: const RefreshRateCapabilities(),
         initialInfo: info);
-    capabilities().then(result.updateCapabilities).catchError((Object _) {
-      result.updateCapabilities(const RefreshRateCapabilities());
+    result.initialize(() async {
+      await refresh();
+      final support = await capabilities();
+      return (info, support);
     });
     return result;
   }
 
-  /// Creates an opt-in application quality adviser. Declare work with setWorkload.
-  static RefreshRateQualityController adviseQuality(
-          {required ValueChanged<QualityRecommendation> onRecommendation,
-          int badFrames = 8,
-          int recoveryFrames = 120}) =>
-      RefreshRateQualityController(
-          onRecommendation: onRecommendation,
-          changes: onChanged,
-          initialInfo: info,
-          badFrames: badFrames,
-          recoveryFrames: recoveryFrames);
-
-  /// Reads native thermal-envelope usage with an explicit forecast horizon.
-  static Future<ThermalHeadroomObservation> thermalHeadroom(
-          {int forecastSeconds = 10}) =>
-      NativePerformance.thermalHeadroom(forecastSeconds: forecastSeconds);
-
-  /// Creates foreground-only thermal polling with a minimum ten-second interval.
-  static ThermalHeadroomMonitor watchThermalHeadroom(
-          {int forecastSeconds = 10,
-          Duration interval = const Duration(seconds: 10)}) =>
-      ThermalHeadroomMonitor(
-          forecastSeconds: forecastSeconds, interval: interval);
-
-  /// Requests sustained workload consistency. Supply the application's known
-  /// baseline because Android has no public getter for prior sustained state.
-  static SustainedPerformanceLease sustainedPerformance(
-          {required bool previousEnabled, Duration? duration}) =>
-      NativePerformance.sustained(
-          previousEnabled: previousEnabled, duration: duration);
-
-  /// Restores the touch-boost state captured by this plugin on Android.
-  static Future<PerformanceRequestResult> resetTouchBoost() =>
-      NativePerformance.resetTouchBoost();
+  /// Restores the native touch-boost state captured by this plugin.
+  static Future<RateRequestResult> resetTouchBoost() async {
+    if (_api is RefreshRateRequestAdapter) {
+      return (_api as RefreshRateRequestAdapter).resetTouchBoost();
+    }
+    return const RateRequestResult(
+        status: RequestStatus.unsupported, preference: RatePreference.system());
+  }
 
   // ── Verification overlays ──────────────────────────────────────
 
   /// Shows a minimal live FPS counter overlay in the top-right corner.
-  static void showFPS() => OverlayController.instance.showFPS();
+  static void showFPS({double? expectedFps}) =>
+      OverlayController.instance.showFPS(expectedFps: expectedFps);
 
   /// Shows a minimal live Hz readout overlay in the top-right corner.
   static void showHz() => OverlayController.instance.showHz();
 
   /// Shows the full diagnostic overlay (FPS + Hz + thermal state).
-  static void showOverlay() => OverlayController.instance.showFull();
+  static void showOverlay({double? expectedFps}) =>
+      OverlayController.instance.showFull(expectedFps: expectedFps);
 
   /// Hides whatever verification overlay is currently visible.
   static void hideOverlay() => OverlayController.instance.hide();
@@ -480,11 +472,20 @@ class RefreshRate {
     RefreshRateFlutterApi.setUp(_flutterApi);
   }
 
-  /// Whether iOS ProMotion (adaptive 120 Hz) is enabled for this app.
-  ///
-  /// Returns `false` until a successful [refresh] is completed and the device
-  /// is an iPhone/iPad with a ProMotion display.
-  static bool get isProMotionReady => _cachedInfo.iosProMotionEnabled == true;
+  /// The application's ProMotion plist setting; null when unavailable.
+  static bool? get isProMotionConfigured => _cachedInfo.iosProMotionEnabled;
+
+  /// Whether the reported display maximum exceeds 60 Hz; null without evidence.
+  /// Independent of whether this plugin can control the Flutter engine.
+  static bool? get supportsHighRefreshRate =>
+      _cachedInfo.supportsHighRefreshRate;
+
+  /// Legacy setup convenience. Requires both the plist flag and a reported
+  /// high-refresh display, but never guarantees engine or presentation cadence.
+  @Deprecated(
+      'Use isProMotionConfigured and supportsHighRefreshRate separately.')
+  static bool get isProMotionReady =>
+      isProMotionConfigured == true && supportsHighRefreshRate == true;
 
   /// Whether the device is currently in Low Power Mode.
   ///
@@ -505,11 +506,9 @@ class RefreshRate {
   /// receive a [SessionReport] with verdict, FPS stats, and bottleneck hints.
   static RefreshRateSession startSession(String name,
           {double? expectedFps,
-          bool includeRenderingContext = false,
           Duration finalizationTimeout = const Duration(milliseconds: 1100)}) =>
       RefreshRateSession.create(name, _cachedInfo,
           expectedFps: expectedFps,
-          includeRenderingContext: includeRenderingContext,
           changes: onChanged,
           finalizationTimeout: finalizationTimeout);
 }

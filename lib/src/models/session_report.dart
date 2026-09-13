@@ -128,8 +128,11 @@ class SessionReport {
   /// Total accepted records across the entire session.
   final int frameCount;
 
-  /// Cadence episodes and bounded milestone evidence.
-  final Map<String, Object?> stutters, milestones;
+  /// Whole-session cadence episode evidence.
+  final Map<String, Object?> stutters;
+
+  /// Whether a wall-clock discontinuity invalidated event coverage.
+  final bool clockDiscontinuity;
 
   /// Expected Flutter frames integrated over explicitly budgeted active segments.
   final double? expectedWorkloadFrameCount;
@@ -219,7 +222,7 @@ class SessionReport {
     required this.deviceState,
     this.frameCount = 0,
     this.stutters = const {},
-    this.milestones = const {},
+    this.clockDiscontinuity = false,
     this.expectedWorkloadFrameCount,
     this.intervalCount = 0,
     this.budgetedFrameCount = 0,
@@ -258,7 +261,7 @@ class SessionReport {
         'histogramRelativeBucketWidth': 0.01,
         'frameCount': frameCount,
         'stutters': stutters,
-        'milestones': milestones,
+        'clockDiscontinuity': clockDiscontinuity,
         'expectedWorkloadFrameCount': expectedWorkloadFrameCount,
         'workloadCoverage': workloadCoverage,
         'intervalCount': intervalCount,

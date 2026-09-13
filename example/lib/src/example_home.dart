@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:refresh_rate/refresh_rate.dart';
 
 import 'models/action_spec.dart';
+import 'benchmark_workload.dart';
 import 'models/info_item.dart';
 import 'sections/action_panel.dart';
 import 'sections/benchmark_panel.dart';
@@ -61,8 +62,8 @@ class _ExampleHomeState extends State<ExampleHome> {
       InfoItem('VRR / LTPO',
           info.reportedVariableRefreshRate?.toString() ?? 'Unknown'),
       InfoItem(
-        'ProMotion ready',
-        RefreshRate.isProMotionReady ? 'Ready' : 'Unavailable',
+        'ProMotion plist',
+        RefreshRate.isProMotionConfigured?.toString() ?? 'Unknown',
       ),
       InfoItem(
         'Low power mode',
@@ -309,7 +310,7 @@ class _ExampleHomeState extends State<ExampleHome> {
         accent: const Color(0xFFFFBA20),
         outlined: false,
         onTap: () {
-          RefreshRate.showOverlay();
+          RefreshRate.showOverlay(expectedFps: 60);
           _setStatus('Full overlay mounted');
         },
       ),
@@ -328,14 +329,24 @@ class _ExampleHomeState extends State<ExampleHome> {
   List<ActionSpec> _benchmarkActions() {
     return [
       ActionSpec(
+          label: 'COMPARE DEFAULT / HIGH',
+          accent: const Color(0xFF00F0FF),
+          outlined: true,
+          onTap: _session == null
+              ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const BenchmarkWorkload()))
+              : null),
+      ActionSpec(
         label: _session == null ? 'START SESSION' : 'SESSION ACTIVE',
         accent: const Color(0xFF36FF8B),
         outlined: _session != null,
         onTap: _session == null
             ? () {
                 setState(() {
-                  _session = RefreshRate.startSession('example_scroll');
-                  _status = 'Benchmark session running';
+                  _session = RefreshRate.startSession('example_scroll',
+                      expectedFps: 60);
+                  _status =
+                      '60 FPS workload (16.67 ms): scroll continuously or pause idle portions';
                 });
               }
             : null,

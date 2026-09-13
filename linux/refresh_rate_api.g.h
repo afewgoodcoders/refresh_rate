@@ -5,229 +5,1188 @@
 
 #ifndef PIGEON_REFRESH_RATE_API_G_H_
 #define PIGEON_REFRESH_RATE_API_G_H_
-#include <flutter/basic_message_channel.h>
-#include <flutter/binary_messenger.h>
-#include <flutter/encodable_value.h>
-#include <flutter/standard_message_codec.h>
 
-#include <map>
-#include <optional>
-#include <string>
+#include <flutter_linux/flutter_linux.h>
 
-namespace refresh_rate {
+G_BEGIN_DECLS
 
+/**
+ * RefreshRateNativePreferenceKind:
+ * REFRESH_RATE_NATIVE_PREFERENCE_KIND_SYSTEM:
+ * REFRESH_RATE_NATIVE_PREFERENCE_KIND_HIGH:
+ * REFRESH_RATE_NATIVE_PREFERENCE_KIND_CATEGORY:
+ * REFRESH_RATE_NATIVE_PREFERENCE_KIND_CONTENT:
+ * REFRESH_RATE_NATIVE_PREFERENCE_KIND_AT_LEAST:
+ *
+ */
+typedef enum {
+  REFRESH_RATE_NATIVE_PREFERENCE_KIND_SYSTEM = 0,
+  REFRESH_RATE_NATIVE_PREFERENCE_KIND_HIGH = 1,
+  REFRESH_RATE_NATIVE_PREFERENCE_KIND_CATEGORY = 2,
+  REFRESH_RATE_NATIVE_PREFERENCE_KIND_CONTENT = 3,
+  REFRESH_RATE_NATIVE_PREFERENCE_KIND_AT_LEAST = 4
+} RefreshRateNativePreferenceKind;
 
-// Generated class from Pigeon.
+/**
+ * RefreshRateNativeSwitchStrategy:
+ * REFRESH_RATE_NATIVE_SWITCH_STRATEGY_SEAMLESS_ONLY:
+ * REFRESH_RATE_NATIVE_SWITCH_STRATEGY_ALLOW_NON_SEAMLESS:
+ *
+ */
+typedef enum {
+  REFRESH_RATE_NATIVE_SWITCH_STRATEGY_SEAMLESS_ONLY = 0,
+  REFRESH_RATE_NATIVE_SWITCH_STRATEGY_ALLOW_NON_SEAMLESS = 1
+} RefreshRateNativeSwitchStrategy;
 
-class FlutterError {
- public:
-  explicit FlutterError(const std::string& code)
-    : code_(code) {}
-  explicit FlutterError(const std::string& code, const std::string& message)
-    : code_(code), message_(message) {}
-  explicit FlutterError(const std::string& code, const std::string& message, const flutter::EncodableValue& details)
-    : code_(code), message_(message), details_(details) {}
+/**
+ * RefreshRateNativeRequestStatus:
+ * REFRESH_RATE_NATIVE_REQUEST_STATUS_SUBMITTED:
+ * REFRESH_RATE_NATIVE_REQUEST_STATUS_UNSUPPORTED:
+ * REFRESH_RATE_NATIVE_REQUEST_STATUS_UNAVAILABLE:
+ * REFRESH_RATE_NATIVE_REQUEST_STATUS_FAILED:
+ * REFRESH_RATE_NATIVE_REQUEST_STATUS_SUPERSEDED:
+ *
+ */
+typedef enum {
+  REFRESH_RATE_NATIVE_REQUEST_STATUS_SUBMITTED = 0,
+  REFRESH_RATE_NATIVE_REQUEST_STATUS_UNSUPPORTED = 1,
+  REFRESH_RATE_NATIVE_REQUEST_STATUS_UNAVAILABLE = 2,
+  REFRESH_RATE_NATIVE_REQUEST_STATUS_FAILED = 3,
+  REFRESH_RATE_NATIVE_REQUEST_STATUS_SUPERSEDED = 4
+} RefreshRateNativeRequestStatus;
 
-  const std::string& code() const { return code_; }
-  const std::string& message() const { return message_; }
-  const flutter::EncodableValue& details() const { return details_; }
+/**
+ * RefreshRateDisplayInfoMessage:
+ *
+ */
 
- private:
-  std::string code_;
-  std::string message_;
-  flutter::EncodableValue details_;
-};
+G_DECLARE_FINAL_TYPE(RefreshRateDisplayInfoMessage, refresh_rate_display_info_message, REFRESH_RATE, DISPLAY_INFO_MESSAGE, GObject)
 
-template<class T> class ErrorOr {
- public:
-  ErrorOr(const T& rhs) : v_(rhs) {}
-  ErrorOr(const T&& rhs) : v_(std::move(rhs)) {}
-  ErrorOr(const FlutterError& rhs) : v_(rhs) {}
-  ErrorOr(const FlutterError&& rhs) : v_(std::move(rhs)) {}
+/**
+ * refresh_rate_display_info_message_new:
+ * current_rate: field in this object.
+ * max_rate: field in this object.
+ * min_rate: field in this object.
+ * supported_rates: field in this object.
+ * is_variable_refresh_rate: field in this object.
+ * engine_target_rate: field in this object.
+ * ios_pro_motion_enabled: field in this object.
+ * android_api_level: field in this object.
+ * is_low_power_mode: field in this object.
+ * thermal_state_index: field in this object.
+ * has_adaptive_refresh_rate: field in this object.
+ * display_server: field in this object.
+ * monitor_count: field in this object.
+ *
+ * Creates a new #DisplayInfoMessage object.
+ *
+ * Returns: a new #RefreshRateDisplayInfoMessage
+ */
+RefreshRateDisplayInfoMessage* refresh_rate_display_info_message_new(double* current_rate, double* max_rate, double* min_rate, FlValue* supported_rates, gboolean* is_variable_refresh_rate, double* engine_target_rate, gboolean* ios_pro_motion_enabled, int64_t* android_api_level, gboolean* is_low_power_mode, int64_t* thermal_state_index, gboolean* has_adaptive_refresh_rate, const gchar* display_server, int64_t* monitor_count);
 
-  bool has_error() const { return std::holds_alternative<FlutterError>(v_); }
-  const T& value() const { return std::get<T>(v_); };
-  const FlutterError& error() const { return std::get<FlutterError>(v_); };
+/**
+ * refresh_rate_display_info_message_get_current_rate
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the currentRate field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_display_info_message_get_current_rate(RefreshRateDisplayInfoMessage* object);
 
- private:
-  friend class RefreshRateHostApi;
-  friend class RefreshRateFlutterApi;
-  ErrorOr() = default;
-  T TakeValue() && { return std::get<T>(std::move(v_)); }
+/**
+ * refresh_rate_display_info_message_get_max_rate
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the maxRate field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_display_info_message_get_max_rate(RefreshRateDisplayInfoMessage* object);
 
-  std::variant<T, FlutterError> v_;
-};
+/**
+ * refresh_rate_display_info_message_get_min_rate
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the minRate field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_display_info_message_get_min_rate(RefreshRateDisplayInfoMessage* object);
 
+/**
+ * refresh_rate_display_info_message_get_supported_rates
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the supportedRates field of @object.
+ *
+ * Returns: the field value.
+ */
+FlValue* refresh_rate_display_info_message_get_supported_rates(RefreshRateDisplayInfoMessage* object);
 
+/**
+ * refresh_rate_display_info_message_get_is_variable_refresh_rate
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the isVariableRefreshRate field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_display_info_message_get_is_variable_refresh_rate(RefreshRateDisplayInfoMessage* object);
 
-// Generated class from Pigeon that represents data sent in messages.
-class DisplayInfoMessage {
- public:
-  // Constructs an object setting all non-nullable fields.
-  DisplayInfoMessage();
+/**
+ * refresh_rate_display_info_message_get_engine_target_rate
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the engineTargetRate field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_display_info_message_get_engine_target_rate(RefreshRateDisplayInfoMessage* object);
 
-  // Constructs an object setting all fields.
-  explicit DisplayInfoMessage(
-    const double* current_rate,
-    const double* max_rate,
-    const double* min_rate,
-    const flutter::EncodableList* supported_rates,
-    const bool* is_variable_refresh_rate,
-    const double* engine_target_rate,
-    const bool* ios_pro_motion_enabled,
-    const int64_t* android_api_level,
-    const bool* is_low_power_mode,
-    const int64_t* thermal_state_index,
-    const bool* has_adaptive_refresh_rate,
-    const std::string* display_server,
-    const int64_t* monitor_count);
+/**
+ * refresh_rate_display_info_message_get_ios_pro_motion_enabled
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the iosProMotionEnabled field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_display_info_message_get_ios_pro_motion_enabled(RefreshRateDisplayInfoMessage* object);
 
-  const double* current_rate() const;
-  void set_current_rate(const double* value_arg);
-  void set_current_rate(double value_arg);
+/**
+ * refresh_rate_display_info_message_get_android_api_level
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the androidApiLevel field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_display_info_message_get_android_api_level(RefreshRateDisplayInfoMessage* object);
 
-  const double* max_rate() const;
-  void set_max_rate(const double* value_arg);
-  void set_max_rate(double value_arg);
+/**
+ * refresh_rate_display_info_message_get_is_low_power_mode
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the isLowPowerMode field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_display_info_message_get_is_low_power_mode(RefreshRateDisplayInfoMessage* object);
 
-  const double* min_rate() const;
-  void set_min_rate(const double* value_arg);
-  void set_min_rate(double value_arg);
+/**
+ * refresh_rate_display_info_message_get_thermal_state_index
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the thermalStateIndex field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_display_info_message_get_thermal_state_index(RefreshRateDisplayInfoMessage* object);
 
-  const flutter::EncodableList* supported_rates() const;
-  void set_supported_rates(const flutter::EncodableList* value_arg);
-  void set_supported_rates(const flutter::EncodableList& value_arg);
+/**
+ * refresh_rate_display_info_message_get_has_adaptive_refresh_rate
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the hasAdaptiveRefreshRate field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_display_info_message_get_has_adaptive_refresh_rate(RefreshRateDisplayInfoMessage* object);
 
-  const bool* is_variable_refresh_rate() const;
-  void set_is_variable_refresh_rate(const bool* value_arg);
-  void set_is_variable_refresh_rate(bool value_arg);
+/**
+ * refresh_rate_display_info_message_get_display_server
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the displayServer field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_display_info_message_get_display_server(RefreshRateDisplayInfoMessage* object);
 
-  const double* engine_target_rate() const;
-  void set_engine_target_rate(const double* value_arg);
-  void set_engine_target_rate(double value_arg);
+/**
+ * refresh_rate_display_info_message_get_monitor_count
+ * @object: a #RefreshRateDisplayInfoMessage.
+ *
+ * Gets the value of the monitorCount field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_display_info_message_get_monitor_count(RefreshRateDisplayInfoMessage* object);
 
-  const bool* ios_pro_motion_enabled() const;
-  void set_ios_pro_motion_enabled(const bool* value_arg);
-  void set_ios_pro_motion_enabled(bool value_arg);
+/**
+ * RefreshRatePreferenceMessage:
+ *
+ */
 
-  const int64_t* android_api_level() const;
-  void set_android_api_level(const int64_t* value_arg);
-  void set_android_api_level(int64_t value_arg);
+G_DECLARE_FINAL_TYPE(RefreshRatePreferenceMessage, refresh_rate_preference_message, REFRESH_RATE, PREFERENCE_MESSAGE, GObject)
 
-  const bool* is_low_power_mode() const;
-  void set_is_low_power_mode(const bool* value_arg);
-  void set_is_low_power_mode(bool value_arg);
+/**
+ * refresh_rate_preference_message_new:
+ * kind: field in this object.
+ * fps: field in this object.
+ * category: field in this object.
+ * strategy: field in this object.
+ *
+ * Creates a new #PreferenceMessage object.
+ *
+ * Returns: a new #RefreshRatePreferenceMessage
+ */
+RefreshRatePreferenceMessage* refresh_rate_preference_message_new(RefreshRateNativePreferenceKind* kind, double* fps, int64_t* category, RefreshRateNativeSwitchStrategy* strategy);
 
-  const int64_t* thermal_state_index() const;
-  void set_thermal_state_index(const int64_t* value_arg);
-  void set_thermal_state_index(int64_t value_arg);
+/**
+ * refresh_rate_preference_message_get_kind
+ * @object: a #RefreshRatePreferenceMessage.
+ *
+ * Gets the value of the kind field of @object.
+ *
+ * Returns: the field value.
+ */
+RefreshRateNativePreferenceKind* refresh_rate_preference_message_get_kind(RefreshRatePreferenceMessage* object);
 
-  const bool* has_adaptive_refresh_rate() const;
-  void set_has_adaptive_refresh_rate(const bool* value_arg);
-  void set_has_adaptive_refresh_rate(bool value_arg);
+/**
+ * refresh_rate_preference_message_get_fps
+ * @object: a #RefreshRatePreferenceMessage.
+ *
+ * Gets the value of the fps field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_preference_message_get_fps(RefreshRatePreferenceMessage* object);
 
-  const std::string* display_server() const;
-  void set_display_server(const std::string_view* value_arg);
-  void set_display_server(std::string_view value_arg);
+/**
+ * refresh_rate_preference_message_get_category
+ * @object: a #RefreshRatePreferenceMessage.
+ *
+ * Gets the value of the category field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_preference_message_get_category(RefreshRatePreferenceMessage* object);
 
-  const int64_t* monitor_count() const;
-  void set_monitor_count(const int64_t* value_arg);
-  void set_monitor_count(int64_t value_arg);
+/**
+ * refresh_rate_preference_message_get_strategy
+ * @object: a #RefreshRatePreferenceMessage.
+ *
+ * Gets the value of the strategy field of @object.
+ *
+ * Returns: the field value.
+ */
+RefreshRateNativeSwitchStrategy* refresh_rate_preference_message_get_strategy(RefreshRatePreferenceMessage* object);
 
+/**
+ * RefreshRateRequestResultMessage:
+ *
+ */
 
- private:
-  static DisplayInfoMessage FromEncodableList(const flutter::EncodableList& list);
-  flutter::EncodableList ToEncodableList() const;
-  friend class RefreshRateHostApi;
-  friend class RefreshRateFlutterApi;
-  friend class PigeonInternalCodecSerializer;
-  std::optional<double> current_rate_;
-  std::optional<double> max_rate_;
-  std::optional<double> min_rate_;
-  std::optional<flutter::EncodableList> supported_rates_;
-  std::optional<bool> is_variable_refresh_rate_;
-  std::optional<double> engine_target_rate_;
-  std::optional<bool> ios_pro_motion_enabled_;
-  std::optional<int64_t> android_api_level_;
-  std::optional<bool> is_low_power_mode_;
-  std::optional<int64_t> thermal_state_index_;
-  std::optional<bool> has_adaptive_refresh_rate_;
-  std::optional<std::string> display_server_;
-  std::optional<int64_t> monitor_count_;
+G_DECLARE_FINAL_TYPE(RefreshRateRequestResultMessage, refresh_rate_request_result_message, REFRESH_RATE, REQUEST_RESULT_MESSAGE, GObject)
 
-};
+/**
+ * refresh_rate_request_result_message_new:
+ * status: field in this object.
+ * backend: field in this object.
+ * scope: field in this object.
+ * message: field in this object.
+ * preference: field in this object.
+ * observed_at_ms: field in this object.
+ *
+ * Creates a new #RequestResultMessage object.
+ *
+ * Returns: a new #RefreshRateRequestResultMessage
+ */
+RefreshRateRequestResultMessage* refresh_rate_request_result_message_new(RefreshRateNativeRequestStatus* status, const gchar* backend, const gchar* scope, const gchar* message, RefreshRatePreferenceMessage* preference, int64_t* observed_at_ms);
 
+/**
+ * refresh_rate_request_result_message_get_status
+ * @object: a #RefreshRateRequestResultMessage.
+ *
+ * Gets the value of the status field of @object.
+ *
+ * Returns: the field value.
+ */
+RefreshRateNativeRequestStatus* refresh_rate_request_result_message_get_status(RefreshRateRequestResultMessage* object);
 
-class PigeonInternalCodecSerializer : public flutter::StandardCodecSerializer {
- public:
-  PigeonInternalCodecSerializer();
-  inline static PigeonInternalCodecSerializer& GetInstance() {
-    static PigeonInternalCodecSerializer sInstance;
-    return sInstance;
-  }
+/**
+ * refresh_rate_request_result_message_get_backend
+ * @object: a #RefreshRateRequestResultMessage.
+ *
+ * Gets the value of the backend field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_request_result_message_get_backend(RefreshRateRequestResultMessage* object);
 
-  void WriteValue(
-    const flutter::EncodableValue& value,
-    flutter::ByteStreamWriter* stream) const override;
+/**
+ * refresh_rate_request_result_message_get_scope
+ * @object: a #RefreshRateRequestResultMessage.
+ *
+ * Gets the value of the scope field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_request_result_message_get_scope(RefreshRateRequestResultMessage* object);
 
- protected:
-  flutter::EncodableValue ReadValueOfType(
-    uint8_t type,
-    flutter::ByteStreamReader* stream) const override;
+/**
+ * refresh_rate_request_result_message_get_message
+ * @object: a #RefreshRateRequestResultMessage.
+ *
+ * Gets the value of the message field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_request_result_message_get_message(RefreshRateRequestResultMessage* object);
 
-};
+/**
+ * refresh_rate_request_result_message_get_preference
+ * @object: a #RefreshRateRequestResultMessage.
+ *
+ * Gets the value of the preference field of @object.
+ *
+ * Returns: the field value.
+ */
+RefreshRatePreferenceMessage* refresh_rate_request_result_message_get_preference(RefreshRateRequestResultMessage* object);
 
-// Generated interface from Pigeon that represents a handler of messages from Flutter.
-class RefreshRateHostApi {
- public:
-  RefreshRateHostApi(const RefreshRateHostApi&) = delete;
-  RefreshRateHostApi& operator=(const RefreshRateHostApi&) = delete;
-  virtual ~RefreshRateHostApi() {}
-  virtual ErrorOr<DisplayInfoMessage> GetDisplayInfo() = 0;
-  virtual std::optional<FlutterError> Enable() = 0;
-  virtual std::optional<FlutterError> Disable() = 0;
-  virtual std::optional<FlutterError> PreferMax() = 0;
-  virtual std::optional<FlutterError> PreferDefault() = 0;
-  virtual std::optional<FlutterError> MatchContent(double fps) = 0;
-  virtual std::optional<FlutterError> Boost(int64_t duration_ms) = 0;
-  virtual std::optional<FlutterError> SetCategory(int64_t category_index) = 0;
-  virtual std::optional<FlutterError> SetTouchBoost(bool enabled) = 0;
-  virtual ErrorOr<bool> IsSupported() = 0;
+/**
+ * refresh_rate_request_result_message_get_observed_at_ms
+ * @object: a #RefreshRateRequestResultMessage.
+ *
+ * Gets the value of the observedAtMs field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_request_result_message_get_observed_at_ms(RefreshRateRequestResultMessage* object);
 
-  // The codec used by RefreshRateHostApi.
-  static const flutter::StandardMessageCodec& GetCodec();
-  // Sets up an instance of `RefreshRateHostApi` to handle messages through the `binary_messenger`.
-  static void SetUp(
-    flutter::BinaryMessenger* binary_messenger,
-    RefreshRateHostApi* api);
-  static void SetUp(
-    flutter::BinaryMessenger* binary_messenger,
-    RefreshRateHostApi* api,
-    const std::string& message_channel_suffix);
-  static flutter::EncodableValue WrapError(std::string_view error_message);
-  static flutter::EncodableValue WrapError(const FlutterError& error);
+/**
+ * RefreshRateCapabilitiesMessage:
+ *
+ */
 
- protected:
-  RefreshRateHostApi() = default;
+G_DECLARE_FINAL_TYPE(RefreshRateCapabilitiesMessage, refresh_rate_capabilities_message, REFRESH_RATE, CAPABILITIES_MESSAGE, GObject)
 
-};
-// Generated class from Pigeon that represents Flutter messages that can be called from C++.
-class RefreshRateFlutterApi {
- public:
-  RefreshRateFlutterApi(flutter::BinaryMessenger* binary_messenger);
-  RefreshRateFlutterApi(
-    flutter::BinaryMessenger* binary_messenger,
-    const std::string& message_channel_suffix);
-  static const flutter::StandardMessageCodec& GetCodec();
-  void OnDisplayInfoChanged(
-    const DisplayInfoMessage& info,
-    std::function<void(void)>&& on_success,
-    std::function<void(const FlutterError&)>&& on_error);
+/**
+ * refresh_rate_capabilities_message_new:
+ * query: field in this object.
+ * surface_voting: field in this object.
+ * window_preferences: field in this object.
+ * category_hints: field in this object.
+ * engine_control: field in this object.
+ * presentation_observation: field in this object.
+ * at_least: field in this object.
+ * content_matching: field in this object.
+ * touch_boost: field in this object.
+ * callback_observation: field in this object.
+ *
+ * Creates a new #CapabilitiesMessage object.
+ *
+ * Returns: a new #RefreshRateCapabilitiesMessage
+ */
+RefreshRateCapabilitiesMessage* refresh_rate_capabilities_message_new(gboolean* query, gboolean* surface_voting, gboolean* window_preferences, gboolean* category_hints, gboolean* engine_control, gboolean* presentation_observation, gboolean* at_least, gboolean* content_matching, gboolean* touch_boost, gboolean* callback_observation);
 
- private:
-  flutter::BinaryMessenger* binary_messenger_;
-  std::string message_channel_suffix_;
-};
+/**
+ * refresh_rate_capabilities_message_get_query
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the query field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_query(RefreshRateCapabilitiesMessage* object);
 
-}  // namespace refresh_rate
+/**
+ * refresh_rate_capabilities_message_get_surface_voting
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the surfaceVoting field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_surface_voting(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_window_preferences
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the windowPreferences field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_window_preferences(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_category_hints
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the categoryHints field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_category_hints(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_engine_control
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the engineControl field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_engine_control(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_presentation_observation
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the presentationObservation field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_presentation_observation(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_at_least
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the atLeast field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_at_least(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_content_matching
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the contentMatching field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_content_matching(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_touch_boost
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the touchBoost field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_touch_boost(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * refresh_rate_capabilities_message_get_callback_observation
+ * @object: a #RefreshRateCapabilitiesMessage.
+ *
+ * Gets the value of the callbackObservation field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_capabilities_message_get_callback_observation(RefreshRateCapabilitiesMessage* object);
+
+/**
+ * RefreshRateDiagnosticsMessage:
+ *
+ */
+
+G_DECLARE_FINAL_TYPE(RefreshRateDiagnosticsMessage, refresh_rate_diagnostics_message, REFRESH_RATE, DIAGNOSTICS_MESSAGE, GObject)
+
+/**
+ * refresh_rate_diagnostics_message_new:
+ * source: field in this object.
+ * display_id: field in this object.
+ * scope: field in this object.
+ * current_hz: field in this object.
+ * maximum_hz: field in this object.
+ * suggested_normal_hz: field in this object.
+ * suggested_high_hz: field in this object.
+ * callback_hz: field in this object.
+ * expected_callback_hz: field in this object.
+ * sample_count: field in this object.
+ * window_us: field in this object.
+ * activity_attached: field in this object.
+ * surface_available: field in this object.
+ * touch_boost_enabled: field in this object.
+ * last_native_request: field in this object.
+ * target_generation: field in this object.
+ * submission_count: field in this object.
+ *
+ * Creates a new #DiagnosticsMessage object.
+ *
+ * Returns: a new #RefreshRateDiagnosticsMessage
+ */
+RefreshRateDiagnosticsMessage* refresh_rate_diagnostics_message_new(const gchar* source, const gchar* display_id, const gchar* scope, double* current_hz, double* maximum_hz, double* suggested_normal_hz, double* suggested_high_hz, double* callback_hz, double* expected_callback_hz, int64_t* sample_count, int64_t* window_us, gboolean* activity_attached, gboolean* surface_available, gboolean* touch_boost_enabled, RefreshRateRequestResultMessage* last_native_request, int64_t* target_generation, int64_t* submission_count);
+
+/**
+ * refresh_rate_diagnostics_message_get_source
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the source field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_diagnostics_message_get_source(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_display_id
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the displayId field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_diagnostics_message_get_display_id(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_scope
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the scope field of @object.
+ *
+ * Returns: the field value.
+ */
+const gchar* refresh_rate_diagnostics_message_get_scope(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_current_hz
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the currentHz field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_diagnostics_message_get_current_hz(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_maximum_hz
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the maximumHz field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_diagnostics_message_get_maximum_hz(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_suggested_normal_hz
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the suggestedNormalHz field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_diagnostics_message_get_suggested_normal_hz(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_suggested_high_hz
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the suggestedHighHz field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_diagnostics_message_get_suggested_high_hz(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_callback_hz
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the callbackHz field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_diagnostics_message_get_callback_hz(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_expected_callback_hz
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the expectedCallbackHz field of @object.
+ *
+ * Returns: the field value.
+ */
+double* refresh_rate_diagnostics_message_get_expected_callback_hz(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_sample_count
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the sampleCount field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_diagnostics_message_get_sample_count(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_window_us
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the windowUs field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_diagnostics_message_get_window_us(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_activity_attached
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the activityAttached field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_diagnostics_message_get_activity_attached(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_surface_available
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the surfaceAvailable field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_diagnostics_message_get_surface_available(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_touch_boost_enabled
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the touchBoostEnabled field of @object.
+ *
+ * Returns: the field value.
+ */
+gboolean* refresh_rate_diagnostics_message_get_touch_boost_enabled(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_last_native_request
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the lastNativeRequest field of @object.
+ *
+ * Returns: the field value.
+ */
+RefreshRateRequestResultMessage* refresh_rate_diagnostics_message_get_last_native_request(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_target_generation
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the targetGeneration field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_diagnostics_message_get_target_generation(RefreshRateDiagnosticsMessage* object);
+
+/**
+ * refresh_rate_diagnostics_message_get_submission_count
+ * @object: a #RefreshRateDiagnosticsMessage.
+ *
+ * Gets the value of the submissionCount field of @object.
+ *
+ * Returns: the field value.
+ */
+int64_t* refresh_rate_diagnostics_message_get_submission_count(RefreshRateDiagnosticsMessage* object);
+
+G_DECLARE_FINAL_TYPE(RefreshRateMessageCodec, refresh_rate_message_codec, REFRESH_RATE, MESSAGE_CODEC, FlStandardMessageCodec)
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApi, refresh_rate_refresh_rate_host_api, REFRESH_RATE, REFRESH_RATE_HOST_API, GObject)
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiGetDisplayInfoResponse, refresh_rate_refresh_rate_host_api_get_display_info_response, REFRESH_RATE, REFRESH_RATE_HOST_API_GET_DISPLAY_INFO_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_get_display_info_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.getDisplayInfo.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiGetDisplayInfoResponse
+ */
+RefreshRateRefreshRateHostApiGetDisplayInfoResponse* refresh_rate_refresh_rate_host_api_get_display_info_response_new(RefreshRateDisplayInfoMessage* return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_get_display_info_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.getDisplayInfo.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiGetDisplayInfoResponse
+ */
+RefreshRateRefreshRateHostApiGetDisplayInfoResponse* refresh_rate_refresh_rate_host_api_get_display_info_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiGetCapabilitiesResponse, refresh_rate_refresh_rate_host_api_get_capabilities_response, REFRESH_RATE, REFRESH_RATE_HOST_API_GET_CAPABILITIES_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_get_capabilities_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.getCapabilities.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiGetCapabilitiesResponse
+ */
+RefreshRateRefreshRateHostApiGetCapabilitiesResponse* refresh_rate_refresh_rate_host_api_get_capabilities_response_new(RefreshRateCapabilitiesMessage* return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_get_capabilities_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.getCapabilities.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiGetCapabilitiesResponse
+ */
+RefreshRateRefreshRateHostApiGetCapabilitiesResponse* refresh_rate_refresh_rate_host_api_get_capabilities_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiGetDiagnosticsResponse, refresh_rate_refresh_rate_host_api_get_diagnostics_response, REFRESH_RATE, REFRESH_RATE_HOST_API_GET_DIAGNOSTICS_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_get_diagnostics_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.getDiagnostics.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiGetDiagnosticsResponse
+ */
+RefreshRateRefreshRateHostApiGetDiagnosticsResponse* refresh_rate_refresh_rate_host_api_get_diagnostics_response_new(RefreshRateDiagnosticsMessage* return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_get_diagnostics_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.getDiagnostics.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiGetDiagnosticsResponse
+ */
+RefreshRateRefreshRateHostApiGetDiagnosticsResponse* refresh_rate_refresh_rate_host_api_get_diagnostics_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiSubmitPreferenceResponse, refresh_rate_refresh_rate_host_api_submit_preference_response, REFRESH_RATE, REFRESH_RATE_HOST_API_SUBMIT_PREFERENCE_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_submit_preference_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.submitPreference.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiSubmitPreferenceResponse
+ */
+RefreshRateRefreshRateHostApiSubmitPreferenceResponse* refresh_rate_refresh_rate_host_api_submit_preference_response_new(RefreshRateRequestResultMessage* return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_submit_preference_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.submitPreference.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiSubmitPreferenceResponse
+ */
+RefreshRateRefreshRateHostApiSubmitPreferenceResponse* refresh_rate_refresh_rate_host_api_submit_preference_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiResetTouchBoostResponse, refresh_rate_refresh_rate_host_api_reset_touch_boost_response, REFRESH_RATE, REFRESH_RATE_HOST_API_RESET_TOUCH_BOOST_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_reset_touch_boost_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.resetTouchBoost.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiResetTouchBoostResponse
+ */
+RefreshRateRefreshRateHostApiResetTouchBoostResponse* refresh_rate_refresh_rate_host_api_reset_touch_boost_response_new(RefreshRateRequestResultMessage* return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_reset_touch_boost_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.resetTouchBoost.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiResetTouchBoostResponse
+ */
+RefreshRateRefreshRateHostApiResetTouchBoostResponse* refresh_rate_refresh_rate_host_api_reset_touch_boost_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiStartObservationResponse, refresh_rate_refresh_rate_host_api_start_observation_response, REFRESH_RATE, REFRESH_RATE_HOST_API_START_OBSERVATION_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_start_observation_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.startObservation.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiStartObservationResponse
+ */
+RefreshRateRefreshRateHostApiStartObservationResponse* refresh_rate_refresh_rate_host_api_start_observation_response_new(gboolean return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_start_observation_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.startObservation.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiStartObservationResponse
+ */
+RefreshRateRefreshRateHostApiStartObservationResponse* refresh_rate_refresh_rate_host_api_start_observation_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiStopObservationResponse, refresh_rate_refresh_rate_host_api_stop_observation_response, REFRESH_RATE, REFRESH_RATE_HOST_API_STOP_OBSERVATION_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_stop_observation_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.stopObservation.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiStopObservationResponse
+ */
+RefreshRateRefreshRateHostApiStopObservationResponse* refresh_rate_refresh_rate_host_api_stop_observation_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_stop_observation_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.stopObservation.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiStopObservationResponse
+ */
+RefreshRateRefreshRateHostApiStopObservationResponse* refresh_rate_refresh_rate_host_api_stop_observation_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiEnableResponse, refresh_rate_refresh_rate_host_api_enable_response, REFRESH_RATE, REFRESH_RATE_HOST_API_ENABLE_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_enable_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.enable.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiEnableResponse
+ */
+RefreshRateRefreshRateHostApiEnableResponse* refresh_rate_refresh_rate_host_api_enable_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_enable_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.enable.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiEnableResponse
+ */
+RefreshRateRefreshRateHostApiEnableResponse* refresh_rate_refresh_rate_host_api_enable_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiDisableResponse, refresh_rate_refresh_rate_host_api_disable_response, REFRESH_RATE, REFRESH_RATE_HOST_API_DISABLE_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_disable_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.disable.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiDisableResponse
+ */
+RefreshRateRefreshRateHostApiDisableResponse* refresh_rate_refresh_rate_host_api_disable_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_disable_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.disable.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiDisableResponse
+ */
+RefreshRateRefreshRateHostApiDisableResponse* refresh_rate_refresh_rate_host_api_disable_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiPreferMaxResponse, refresh_rate_refresh_rate_host_api_prefer_max_response, REFRESH_RATE, REFRESH_RATE_HOST_API_PREFER_MAX_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_prefer_max_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.preferMax.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiPreferMaxResponse
+ */
+RefreshRateRefreshRateHostApiPreferMaxResponse* refresh_rate_refresh_rate_host_api_prefer_max_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_prefer_max_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.preferMax.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiPreferMaxResponse
+ */
+RefreshRateRefreshRateHostApiPreferMaxResponse* refresh_rate_refresh_rate_host_api_prefer_max_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiPreferDefaultResponse, refresh_rate_refresh_rate_host_api_prefer_default_response, REFRESH_RATE, REFRESH_RATE_HOST_API_PREFER_DEFAULT_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_prefer_default_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.preferDefault.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiPreferDefaultResponse
+ */
+RefreshRateRefreshRateHostApiPreferDefaultResponse* refresh_rate_refresh_rate_host_api_prefer_default_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_prefer_default_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.preferDefault.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiPreferDefaultResponse
+ */
+RefreshRateRefreshRateHostApiPreferDefaultResponse* refresh_rate_refresh_rate_host_api_prefer_default_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiMatchContentResponse, refresh_rate_refresh_rate_host_api_match_content_response, REFRESH_RATE, REFRESH_RATE_HOST_API_MATCH_CONTENT_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_match_content_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.matchContent.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiMatchContentResponse
+ */
+RefreshRateRefreshRateHostApiMatchContentResponse* refresh_rate_refresh_rate_host_api_match_content_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_match_content_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.matchContent.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiMatchContentResponse
+ */
+RefreshRateRefreshRateHostApiMatchContentResponse* refresh_rate_refresh_rate_host_api_match_content_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiBoostResponse, refresh_rate_refresh_rate_host_api_boost_response, REFRESH_RATE, REFRESH_RATE_HOST_API_BOOST_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_boost_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.boost.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiBoostResponse
+ */
+RefreshRateRefreshRateHostApiBoostResponse* refresh_rate_refresh_rate_host_api_boost_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_boost_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.boost.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiBoostResponse
+ */
+RefreshRateRefreshRateHostApiBoostResponse* refresh_rate_refresh_rate_host_api_boost_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiSetCategoryResponse, refresh_rate_refresh_rate_host_api_set_category_response, REFRESH_RATE, REFRESH_RATE_HOST_API_SET_CATEGORY_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_set_category_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.setCategory.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiSetCategoryResponse
+ */
+RefreshRateRefreshRateHostApiSetCategoryResponse* refresh_rate_refresh_rate_host_api_set_category_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_set_category_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.setCategory.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiSetCategoryResponse
+ */
+RefreshRateRefreshRateHostApiSetCategoryResponse* refresh_rate_refresh_rate_host_api_set_category_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiSetTouchBoostResponse, refresh_rate_refresh_rate_host_api_set_touch_boost_response, REFRESH_RATE, REFRESH_RATE_HOST_API_SET_TOUCH_BOOST_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_set_touch_boost_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.setTouchBoost.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiSetTouchBoostResponse
+ */
+RefreshRateRefreshRateHostApiSetTouchBoostResponse* refresh_rate_refresh_rate_host_api_set_touch_boost_response_new();
+
+/**
+ * refresh_rate_refresh_rate_host_api_set_touch_boost_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.setTouchBoost.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiSetTouchBoostResponse
+ */
+RefreshRateRefreshRateHostApiSetTouchBoostResponse* refresh_rate_refresh_rate_host_api_set_touch_boost_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateHostApiIsSupportedResponse, refresh_rate_refresh_rate_host_api_is_supported_response, REFRESH_RATE, REFRESH_RATE_HOST_API_IS_SUPPORTED_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_host_api_is_supported_response_new:
+ *
+ * Creates a new response to RefreshRateHostApi.isSupported.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiIsSupportedResponse
+ */
+RefreshRateRefreshRateHostApiIsSupportedResponse* refresh_rate_refresh_rate_host_api_is_supported_response_new(gboolean return_value);
+
+/**
+ * refresh_rate_refresh_rate_host_api_is_supported_response_new_error:
+ * @code: error code.
+ * @message: error message.
+ * @details: (allow-none): error details or %NULL.
+ *
+ * Creates a new error response to RefreshRateHostApi.isSupported.
+ *
+ * Returns: a new #RefreshRateRefreshRateHostApiIsSupportedResponse
+ */
+RefreshRateRefreshRateHostApiIsSupportedResponse* refresh_rate_refresh_rate_host_api_is_supported_response_new_error(const gchar* code, const gchar* message, FlValue* details);
+
+/**
+ * RefreshRateRefreshRateHostApiVTable:
+ *
+ * Table of functions exposed by RefreshRateHostApi to be implemented by the API provider.
+ */
+typedef struct {
+  RefreshRateRefreshRateHostApiGetDisplayInfoResponse* (*get_display_info)(gpointer user_data);
+  RefreshRateRefreshRateHostApiGetCapabilitiesResponse* (*get_capabilities)(gpointer user_data);
+  RefreshRateRefreshRateHostApiGetDiagnosticsResponse* (*get_diagnostics)(gpointer user_data);
+  RefreshRateRefreshRateHostApiSubmitPreferenceResponse* (*submit_preference)(RefreshRatePreferenceMessage* preference, gpointer user_data);
+  RefreshRateRefreshRateHostApiResetTouchBoostResponse* (*reset_touch_boost)(gpointer user_data);
+  RefreshRateRefreshRateHostApiStartObservationResponse* (*start_observation)(gpointer user_data);
+  RefreshRateRefreshRateHostApiStopObservationResponse* (*stop_observation)(gpointer user_data);
+  RefreshRateRefreshRateHostApiEnableResponse* (*enable)(gpointer user_data);
+  RefreshRateRefreshRateHostApiDisableResponse* (*disable)(gpointer user_data);
+  RefreshRateRefreshRateHostApiPreferMaxResponse* (*prefer_max)(gpointer user_data);
+  RefreshRateRefreshRateHostApiPreferDefaultResponse* (*prefer_default)(gpointer user_data);
+  RefreshRateRefreshRateHostApiMatchContentResponse* (*match_content)(double fps, gpointer user_data);
+  RefreshRateRefreshRateHostApiBoostResponse* (*boost)(int64_t duration_ms, gpointer user_data);
+  RefreshRateRefreshRateHostApiSetCategoryResponse* (*set_category)(int64_t category_index, gpointer user_data);
+  RefreshRateRefreshRateHostApiSetTouchBoostResponse* (*set_touch_boost)(gboolean enabled, gpointer user_data);
+  RefreshRateRefreshRateHostApiIsSupportedResponse* (*is_supported)(gpointer user_data);
+} RefreshRateRefreshRateHostApiVTable;
+
+/**
+ * refresh_rate_refresh_rate_host_api_set_method_handlers:
+ *
+ * @messenger: an #FlBinaryMessenger.
+ * @suffix: (allow-none): a suffix to add to the API or %NULL for none.
+ * @vtable: implementations of the methods in this API.
+ * @user_data: (closure): user data to pass to the functions in @vtable.
+ * @user_data_free_func: (allow-none): a function which gets called to free @user_data, or %NULL.
+ *
+ * Connects the method handlers in the RefreshRateHostApi API.
+ */
+void refresh_rate_refresh_rate_host_api_set_method_handlers(FlBinaryMessenger* messenger, const gchar* suffix, const RefreshRateRefreshRateHostApiVTable* vtable, gpointer user_data, GDestroyNotify user_data_free_func);
+
+/**
+ * refresh_rate_refresh_rate_host_api_clear_method_handlers:
+ *
+ * @messenger: an #FlBinaryMessenger.
+ * @suffix: (allow-none): a suffix to add to the API or %NULL for none.
+ *
+ * Clears the method handlers in the RefreshRateHostApi API.
+ */
+void refresh_rate_refresh_rate_host_api_clear_method_handlers(FlBinaryMessenger* messenger, const gchar* suffix);
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse, refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response, REFRESH_RATE, REFRESH_RATE_FLUTTER_API_ON_DISPLAY_INFO_CHANGED_RESPONSE, GObject)
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_is_error:
+ * @response: a #RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse.
+ *
+ * Checks if a response to RefreshRateFlutterApi.onDisplayInfoChanged is an error.
+ *
+ * Returns: a %TRUE if this response is an error.
+ */
+gboolean refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_is_error(RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse* response);
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_get_error_code:
+ * @response: a #RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse.
+ *
+ * Get the error code for this response.
+ *
+ * Returns: an error code or %NULL if not an error.
+ */
+const gchar* refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_get_error_code(RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse* response);
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_get_error_message:
+ * @response: a #RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse.
+ *
+ * Get the error message for this response.
+ *
+ * Returns: an error message.
+ */
+const gchar* refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_get_error_message(RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse* response);
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_get_error_details:
+ * @response: a #RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse.
+ *
+ * Get the error details for this response.
+ *
+ * Returns: (allow-none): an error details or %NULL.
+ */
+FlValue* refresh_rate_refresh_rate_flutter_api_on_display_info_changed_response_get_error_details(RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse* response);
+
+/**
+ * RefreshRateRefreshRateFlutterApi:
+ *
+ */
+
+G_DECLARE_FINAL_TYPE(RefreshRateRefreshRateFlutterApi, refresh_rate_refresh_rate_flutter_api, REFRESH_RATE, REFRESH_RATE_FLUTTER_API, GObject)
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_new:
+ * @messenger: an #FlBinaryMessenger.
+ * @suffix: (allow-none): a suffix to add to the API or %NULL for none.
+ *
+ * Creates a new object to access the RefreshRateFlutterApi API.
+ *
+ * Returns: a new #RefreshRateRefreshRateFlutterApi
+ */
+RefreshRateRefreshRateFlutterApi* refresh_rate_refresh_rate_flutter_api_new(FlBinaryMessenger* messenger, const gchar* suffix);
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_on_display_info_changed:
+ * @api: a #RefreshRateRefreshRateFlutterApi.
+ * @info: parameter for this method.
+ * @cancellable: (allow-none): a #GCancellable or %NULL.
+ * @callback: (scope async): (allow-none): a #GAsyncReadyCallback to call when the call is complete or %NULL to ignore the response.
+ * @user_data: (closure): user data to pass to @callback.
+ *
+ */
+void refresh_rate_refresh_rate_flutter_api_on_display_info_changed(RefreshRateRefreshRateFlutterApi* api, RefreshRateDisplayInfoMessage* info, GCancellable* cancellable, GAsyncReadyCallback callback, gpointer user_data);
+
+/**
+ * refresh_rate_refresh_rate_flutter_api_on_display_info_changed_finish:
+ * @api: a #RefreshRateRefreshRateFlutterApi.
+ * @result: a #GAsyncResult.
+ * @error: (allow-none): #GError location to store the error occurring, or %NULL to ignore.
+ *
+ * Completes a refresh_rate_refresh_rate_flutter_api_on_display_info_changed() call.
+ *
+ * Returns: a #RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse or %NULL on error.
+ */
+RefreshRateRefreshRateFlutterApiOnDisplayInfoChangedResponse* refresh_rate_refresh_rate_flutter_api_on_display_info_changed_finish(RefreshRateRefreshRateFlutterApi* api, GAsyncResult* result, GError** error);
+
+G_END_DECLS
+
 #endif  // PIGEON_REFRESH_RATE_API_G_H_

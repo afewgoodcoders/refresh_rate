@@ -78,6 +78,10 @@ class DisplayInfo {
   /// Flutter display information; not an observed engine frame-rate cap.
   double? get engineReportedDisplayHz => _valid(engineTargetRate);
 
+  /// Reported display capability, independent of plugin control support.
+  bool? get supportsHighRefreshRate =>
+      displayModeMaxHz == null ? null : displayModeMaxHz! > 60;
+
   /// Whether no snapshot exists or the last read is older than five seconds.
   bool get isStale =>
       observedAt == null ||

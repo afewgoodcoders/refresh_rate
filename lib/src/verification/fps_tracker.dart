@@ -33,9 +33,6 @@ class FrameSample {
   /// Immutable workload tags applicable at the frame event time.
   final Map<String, String> tags;
 
-  /// Optional engine raster-cache context, not process memory or GPU allocation.
-  final Map<String, int>? renderingContext;
-
   /// Creates a [FrameSample] with the supplied configuration.
   FrameSample(
       {required this.buildUs,
@@ -45,17 +42,12 @@ class FrameSample {
       required this.timestamp,
       this.hasEventTime = true,
       this.timestampSource = 'provided',
-      Map<String, int>? renderingContext,
       this.targetHz,
       Map<String, String> tags = const {}})
-      : tags = Map.unmodifiable(tags),
-        renderingContext = renderingContext == null
-            ? null
-            : Map.unmodifiable(renderingContext);
+      : tags = Map.unmodifiable(tags);
 
   /// Converts raw phases using the raster-finish wall-time bridge.
-  factory FrameSample.fromTiming(FrameTiming t,
-      {bool includeRenderingContext = false}) {
+  factory FrameSample.fromTiming(FrameTiming t) {
     final vsync = t.timestampInMicroseconds(FramePhase.vsyncStart);
     final finish = t.timestampInMicroseconds(FramePhase.rasterFinish);
     final wall = t.timestampInMicroseconds(FramePhase.rasterFinishWallTime);
@@ -65,14 +57,6 @@ class FrameSample {
         rasterUs: t.rasterDuration.inMicroseconds,
         totalUs: t.totalSpan.inMicroseconds,
         vsyncUs: vsync,
-        renderingContext: includeRenderingContext
-            ? {
-                'layerCacheCount': t.layerCacheCount,
-                'layerCacheBytes': t.layerCacheBytes,
-                'pictureCacheCount': t.pictureCacheCount,
-                'pictureCacheBytes': t.pictureCacheBytes,
-              }
-            : null,
         hasEventTime: event != null,
         timestampSource: event?.source ?? 'unavailable',
         timestamp: event?.timestamp ?? DateTime.now().toUtc());
@@ -88,7 +72,6 @@ class FrameSample {
         'rasterMs': rasterUs / 1000,
         'pipelineLatencyMs': totalUs / 1000,
         'targetHz': targetHz,
-        'renderingContext': renderingContext,
         'tags': tags
       };
 }

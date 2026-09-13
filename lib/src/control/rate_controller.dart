@@ -137,6 +137,7 @@ class RateRequestResult {
       required this.preference,
       this.backend = 'unavailable',
       this.scope = 'unknown',
+      this.reused = false,
       this.message});
 
   /// Submission outcome; it does not establish hardware fulfilment.
@@ -150,6 +151,9 @@ class RateRequestResult {
 
   /// Window, surface, engine or observer scope of this value.
   final String scope;
+
+  /// An unchanged successful preference was reused without a native write.
+  final bool reused;
 
   /// Optional explanation of unsupported state or failure.
   final String? message;
@@ -174,8 +178,7 @@ class RefreshRateCapabilities {
       this.atLeast = false,
       this.contentMatching = false,
       this.touchBoost = false,
-      this.thermalHeadroom = false,
-      this.sustainedPerformance = false});
+      this.callbackObservation = false});
 
   /// Whether the platform exposes display information.
   final bool query;
@@ -204,11 +207,8 @@ class RefreshRateCapabilities {
   /// Native touch boost with a public baseline getter.
   final bool touchBoost;
 
-  /// Native thermal-headroom API availability; individual readings may be null.
-  final bool thermalHeadroom;
-
-  /// Device-declared sustained performance support.
-  final bool sustainedPerformance;
+  /// A bounded native/browser callback observer is available.
+  final bool callbackObservation;
 
   /// Serializes explicit per-operation support.
   Map<String, Object?> toMap() => {
@@ -221,8 +221,7 @@ class RefreshRateCapabilities {
         'atLeast': atLeast,
         'contentMatching': contentMatching,
         'touchBoost': touchBoost,
-        'thermalHeadroom': thermalHeadroom,
-        'sustainedPerformance': sustainedPerformance,
+        'callbackObservation': callbackObservation,
       };
 
   /// Decodes explicit capabilities; absent flags remain unsupported.
@@ -237,8 +236,7 @@ class RefreshRateCapabilities {
           atLeast: map['atLeast'] == true,
           contentMatching: map['contentMatching'] == true,
           touchBoost: map['touchBoost'] == true,
-          thermalHeadroom: map['thermalHeadroom'] == true,
-          sustainedPerformance: map['sustainedPerformance'] == true);
+          callbackObservation: map['callbackObservation'] == true);
 }
 
 /// Timestamped request decision and actual submission result.
@@ -266,6 +264,7 @@ class RefreshRateDecision {
         'reason': reason,
         'status': result.status.name,
         'backend': result.backend,
+        'reused': result.reused,
         'scope': result.scope,
         'message': result.message,
         'preference': result.preference.toMap(),
@@ -316,6 +315,7 @@ class RateController {
   final _leases = <int, RefreshRateLease>{};
   final _events = StreamController<RefreshRateDecision>.broadcast();
   final _history = Queue<RefreshRateDecision>();
+  RateRequestResult? _lastSubmitted;
   Future<void> _tail = Future.value();
   int _nextId = 0, _generation = 0;
   bool _disposed = false;
@@ -369,10 +369,13 @@ class RateController {
     return _reconcile(lease.owner, 'released');
   }
 
-  /// Resubmits the current winner after a target or ownership change.
-  Future<RateRequestResult> reconcile({String reason = 'targetChanged'}) =>
-      _reconcile(effectiveLease?.owner ?? 'system', reason);
-  Future<RateRequestResult> _reconcile(String owner, String reason) {
+  /// Reconciles ownership without repeating an unchanged successful write.
+  /// Force only when the native target changed and needs a new submission.
+  Future<RateRequestResult> reconcile(
+          {String reason = 'reconcile', bool force = false}) =>
+      _reconcile(effectiveLease?.owner ?? 'system', reason, force: force);
+  Future<RateRequestResult> _reconcile(String owner, String reason,
+      {bool force = false}) {
     final generation = ++_generation;
     final preference = effectivePreference;
     final completer = Completer<RateRequestResult>();
@@ -383,7 +386,20 @@ class RateController {
             status: RequestStatus.superseded, preference: preference);
       } else {
         try {
-          result = await submit(preference);
+          final previous = force ? null : _lastSubmitted;
+          if (previous != null && previous.preference == preference) {
+            result = RateRequestResult(
+                status: RequestStatus.submitted,
+                preference: preference,
+                backend: previous.backend,
+                scope: previous.scope,
+                reused: true,
+                message: 'Unchanged successful preference; no native write.');
+          } else {
+            _lastSubmitted = null;
+            result = await submit(preference);
+            if (result.submitted) _lastSubmitted = result;
+          }
         } catch (error) {
           result = RateRequestResult(
               status: RequestStatus.failed,

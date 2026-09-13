@@ -2,6 +2,7 @@
 """Exercise real OS lifecycle transitions on an already-running Android target."""
 import argparse
 import pathlib
+import re
 import subprocess
 import threading
 import time
@@ -17,7 +18,7 @@ def run(*command):
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.strip()
 
 rotation = run('shell', 'settings', 'get', 'system', 'user_rotation')
-automatic = run('shell', 'settings', 'get', 'system', 'accelerometer_rotation')
+rotation_mode = run('shell', 'wm', 'user-rotation').split()[0]
 process = None
 timeout = None
 errors = []
@@ -49,9 +50,12 @@ try:
             workers.append(worker)
             worker.start()
         elif 'REFRESH_RATE_HOST_ROTATE' in line:
-            run('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0')
-            current = run('shell', 'settings', 'get', 'system', 'user_rotation')
-            run('shell', 'settings', 'put', 'system', 'user_rotation', '1' if current != '1' else '0')
+            snapshot = run('shell', 'dumpsys', 'input')
+            viewport = re.search(r'Viewport INTERNAL: displayId=0,.*?orientation=(\d)', snapshot)
+            if viewport is None:
+                raise RuntimeError('Cannot determine actual display rotation')
+            target = (int(viewport.group(1)) + 1) % 4
+            run('shell', 'wm', 'user-rotation', 'lock', str(target))
     code = process.wait()
     timeout.cancel()
     for worker in workers:
@@ -65,6 +69,6 @@ finally:
     if process is not None and process.poll() is None:
         process.terminate()
         process.wait(timeout=10)
-    for key, value in [('user_rotation', rotation), ('accelerometer_rotation', automatic)]:
-        run('shell', 'settings', 'delete' if value == 'null' else 'put', 'system',
-            key, *([] if value == 'null' else [value]))
+    run('shell', 'wm', 'user-rotation', 'lock', rotation if rotation != 'null' else '0')
+    if rotation_mode == 'free':
+        run('shell', 'wm', 'user-rotation', 'free')

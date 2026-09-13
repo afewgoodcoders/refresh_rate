@@ -6,6 +6,7 @@ set(PLUGIN_NAME "${PROJECT_NAME}_plugin")
 
 add_library(${PLUGIN_NAME} SHARED
   "refresh_rate_plugin.cc"
+  "refresh_rate_api.g.cc"
 )
 
 apply_standard_settings(${PLUGIN_NAME})

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../control/rate_controller.dart';
 import '../generated/refresh_rate_api.g.dart';
 import '../refresh_rate_api_adapter.dart';
 import 'raf_hz_detector.dart';
@@ -11,7 +12,34 @@ import 'raf_hz_detector.dart';
 /// Legacy control methods are graceful no-ops because
 /// browsers own their vsync scheduling and expose no API to change it.
 class WebRefreshRateApiAdapter
-    implements RefreshRateApiAdapter, RefreshRateDiagnosticsAdapter {
+    implements
+        RefreshRateApiAdapter,
+        RefreshRateDiagnosticsAdapter,
+        RefreshRateRequestAdapter {
+  @override
+  Future<RefreshRateCapabilities> capabilities() async =>
+      const RefreshRateCapabilities(callbackObservation: true);
+
+  @override
+  Future<RateRequestResult> submit(RatePreference preference) async =>
+      RateRequestResult(
+        status: preference.kind == PreferenceKind.system
+            ? RequestStatus.submitted
+            : RequestStatus.unsupported,
+        preference: preference,
+        backend: 'browser',
+        scope: 'document',
+        message: 'The browser owns refresh scheduling.',
+      );
+
+  @override
+  Future<RateRequestResult> resetTouchBoost() async => const RateRequestResult(
+      status: RequestStatus.unsupported,
+      preference: RatePreference.system(),
+      backend: 'browser',
+      scope: 'document',
+      message: 'Browser touch boost is not configurable.');
+
   @override
   Future<Map<Object?, Object?>> diagnostics() async => {
         'source': 'requestAnimationFrame',

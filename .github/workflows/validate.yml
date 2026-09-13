@@ -25,6 +25,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: python3 scripts/check_apple_sources.py
+      - run: python3 scripts/generate_bindings.py --check
       - run: flutter pub publish --dry-run
         if: matrix.name == 'stable'
   native:
@@ -60,4 +61,105 @@ jobs:
         if: contains(matrix.target, 'linux')
       - run: flutter pub get
       - run: flutter build ${{ matrix.target }}
+        working-directory: example
+
+  android-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: false
+          script: |
+            cd example && flutter test integration_test/refresh_rate_test.dart integration_test/example_workflow_test.dart -d emulator-5554
+            python3 "$GITHUB_WORKSPACE/scripts/test_android_lifecycle.py" --device emulator-5554
+            python3 "$GITHUB_WORKSPACE/scripts/test_android_power.py" --device emulator-5554
+
+  desktop-integration:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            device: macos
+          - os: windows-latest
+            device: windows
+          - os: ubuntu-latest
+            device: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev xvfb
+        if: matrix.device == 'linux'
+      - run: xvfb-run -a flutter test integration_test/refresh_rate_test.dart integration_test/example_workflow_test.dart -d linux
+        if: matrix.device == 'linux'
+        working-directory: example
+      - run: flutter test integration_test/refresh_rate_test.dart integration_test/example_workflow_test.dart -d ${{ matrix.device }}
+        if: matrix.device != 'linux'
+        working-directory: example
+
+  ios-integration:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Boot an available iPhone simulator
+        run: python3 scripts/boot_ios_simulator.py
+      - run: flutter test integration_test/refresh_rate_test.dart integration_test/example_workflow_test.dart -d "$IOS_TEST_DEVICE"
+        working-directory: example
+
+  web-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+      - name: Run browser integration suite
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+          CHROMEDRIVER_EXECUTABLE: ${{ steps.chrome.outputs.chromedriver-path }}
+        run: |
+          "$CHROMEDRIVER_EXECUTABLE" --port=4444 > "$RUNNER_TEMP/chromedriver.log" 2>&1 &
+          driver_pid=$!
+          trap 'kill "$driver_pid"' EXIT
+          flutter drive --driver=test_driver/refresh_rate.dart --target=integration_test/refresh_rate_test.dart -d web-server --browser-name=chrome --headless
+          flutter drive --driver=test_driver/refresh_rate.dart --target=integration_test/example_workflow_test.dart -d web-server --browser-name=chrome --headless
         working-directory: example

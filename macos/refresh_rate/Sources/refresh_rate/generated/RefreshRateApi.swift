@@ -6,7 +6,7 @@
 import Foundation
 
 #if os(iOS)
-  import Flutter
+  import FlutterMacOS
 #elseif os(macOS)
   import FlutterMacOS
 #else
@@ -68,6 +68,27 @@ private func isNullish(_ value: Any?) -> Bool {
 private func nilOrValue<T>(_ value: Any?) -> T? {
   if value is NSNull { return nil }
   return value as! T?
+}
+
+enum NativePreferenceKind: Int {
+  case system = 0
+  case high = 1
+  case category = 2
+  case content = 3
+  case atLeast = 4
+}
+
+enum NativeSwitchStrategy: Int {
+  case seamlessOnly = 0
+  case allowNonSeamless = 1
+}
+
+enum NativeRequestStatus: Int {
+  case submitted = 0
+  case unsupported = 1
+  case unavailable = 2
+  case failed = 3
+  case superseded = 4
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
@@ -138,11 +159,249 @@ struct DisplayInfoMessage {
   }
 }
 
+/// Generated class from Pigeon that represents data sent in messages.
+struct PreferenceMessage {
+  var kind: NativePreferenceKind? = nil
+  var fps: Double? = nil
+  var category: Int64? = nil
+  var strategy: NativeSwitchStrategy? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PreferenceMessage? {
+    let kind: NativePreferenceKind? = nilOrValue(pigeonVar_list[0])
+    let fps: Double? = nilOrValue(pigeonVar_list[1])
+    let category: Int64? = nilOrValue(pigeonVar_list[2])
+    let strategy: NativeSwitchStrategy? = nilOrValue(pigeonVar_list[3])
+
+    return PreferenceMessage(
+      kind: kind,
+      fps: fps,
+      category: category,
+      strategy: strategy
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      kind,
+      fps,
+      category,
+      strategy,
+    ]
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct RequestResultMessage {
+  var status: NativeRequestStatus? = nil
+  var backend: String? = nil
+  var scope: String? = nil
+  var message: String? = nil
+  var preference: PreferenceMessage? = nil
+  var observedAtMs: Int64? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> RequestResultMessage? {
+    let status: NativeRequestStatus? = nilOrValue(pigeonVar_list[0])
+    let backend: String? = nilOrValue(pigeonVar_list[1])
+    let scope: String? = nilOrValue(pigeonVar_list[2])
+    let message: String? = nilOrValue(pigeonVar_list[3])
+    let preference: PreferenceMessage? = nilOrValue(pigeonVar_list[4])
+    let observedAtMs: Int64? = nilOrValue(pigeonVar_list[5])
+
+    return RequestResultMessage(
+      status: status,
+      backend: backend,
+      scope: scope,
+      message: message,
+      preference: preference,
+      observedAtMs: observedAtMs
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      status,
+      backend,
+      scope,
+      message,
+      preference,
+      observedAtMs,
+    ]
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct CapabilitiesMessage {
+  var query: Bool? = nil
+  var surfaceVoting: Bool? = nil
+  var windowPreferences: Bool? = nil
+  var categoryHints: Bool? = nil
+  var engineControl: Bool? = nil
+  var presentationObservation: Bool? = nil
+  var atLeast: Bool? = nil
+  var contentMatching: Bool? = nil
+  var touchBoost: Bool? = nil
+  var callbackObservation: Bool? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> CapabilitiesMessage? {
+    let query: Bool? = nilOrValue(pigeonVar_list[0])
+    let surfaceVoting: Bool? = nilOrValue(pigeonVar_list[1])
+    let windowPreferences: Bool? = nilOrValue(pigeonVar_list[2])
+    let categoryHints: Bool? = nilOrValue(pigeonVar_list[3])
+    let engineControl: Bool? = nilOrValue(pigeonVar_list[4])
+    let presentationObservation: Bool? = nilOrValue(pigeonVar_list[5])
+    let atLeast: Bool? = nilOrValue(pigeonVar_list[6])
+    let contentMatching: Bool? = nilOrValue(pigeonVar_list[7])
+    let touchBoost: Bool? = nilOrValue(pigeonVar_list[8])
+    let callbackObservation: Bool? = nilOrValue(pigeonVar_list[9])
+
+    return CapabilitiesMessage(
+      query: query,
+      surfaceVoting: surfaceVoting,
+      windowPreferences: windowPreferences,
+      categoryHints: categoryHints,
+      engineControl: engineControl,
+      presentationObservation: presentationObservation,
+      atLeast: atLeast,
+      contentMatching: contentMatching,
+      touchBoost: touchBoost,
+      callbackObservation: callbackObservation
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      query,
+      surfaceVoting,
+      windowPreferences,
+      categoryHints,
+      engineControl,
+      presentationObservation,
+      atLeast,
+      contentMatching,
+      touchBoost,
+      callbackObservation,
+    ]
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct DiagnosticsMessage {
+  var source: String? = nil
+  var displayId: String? = nil
+  var scope: String? = nil
+  var currentHz: Double? = nil
+  var maximumHz: Double? = nil
+  var suggestedNormalHz: Double? = nil
+  var suggestedHighHz: Double? = nil
+  var callbackHz: Double? = nil
+  var expectedCallbackHz: Double? = nil
+  var sampleCount: Int64? = nil
+  var windowUs: Int64? = nil
+  var activityAttached: Bool? = nil
+  var surfaceAvailable: Bool? = nil
+  var touchBoostEnabled: Bool? = nil
+  var lastNativeRequest: RequestResultMessage? = nil
+  var targetGeneration: Int64? = nil
+  var submissionCount: Int64? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> DiagnosticsMessage? {
+    let source: String? = nilOrValue(pigeonVar_list[0])
+    let displayId: String? = nilOrValue(pigeonVar_list[1])
+    let scope: String? = nilOrValue(pigeonVar_list[2])
+    let currentHz: Double? = nilOrValue(pigeonVar_list[3])
+    let maximumHz: Double? = nilOrValue(pigeonVar_list[4])
+    let suggestedNormalHz: Double? = nilOrValue(pigeonVar_list[5])
+    let suggestedHighHz: Double? = nilOrValue(pigeonVar_list[6])
+    let callbackHz: Double? = nilOrValue(pigeonVar_list[7])
+    let expectedCallbackHz: Double? = nilOrValue(pigeonVar_list[8])
+    let sampleCount: Int64? = nilOrValue(pigeonVar_list[9])
+    let windowUs: Int64? = nilOrValue(pigeonVar_list[10])
+    let activityAttached: Bool? = nilOrValue(pigeonVar_list[11])
+    let surfaceAvailable: Bool? = nilOrValue(pigeonVar_list[12])
+    let touchBoostEnabled: Bool? = nilOrValue(pigeonVar_list[13])
+    let lastNativeRequest: RequestResultMessage? = nilOrValue(pigeonVar_list[14])
+    let targetGeneration: Int64? = nilOrValue(pigeonVar_list[15])
+    let submissionCount: Int64? = nilOrValue(pigeonVar_list[16])
+
+    return DiagnosticsMessage(
+      source: source,
+      displayId: displayId,
+      scope: scope,
+      currentHz: currentHz,
+      maximumHz: maximumHz,
+      suggestedNormalHz: suggestedNormalHz,
+      suggestedHighHz: suggestedHighHz,
+      callbackHz: callbackHz,
+      expectedCallbackHz: expectedCallbackHz,
+      sampleCount: sampleCount,
+      windowUs: windowUs,
+      activityAttached: activityAttached,
+      surfaceAvailable: surfaceAvailable,
+      touchBoostEnabled: touchBoostEnabled,
+      lastNativeRequest: lastNativeRequest,
+      targetGeneration: targetGeneration,
+      submissionCount: submissionCount
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      source,
+      displayId,
+      scope,
+      currentHz,
+      maximumHz,
+      suggestedNormalHz,
+      suggestedHighHz,
+      callbackHz,
+      expectedCallbackHz,
+      sampleCount,
+      windowUs,
+      activityAttached,
+      surfaceAvailable,
+      touchBoostEnabled,
+      lastNativeRequest,
+      targetGeneration,
+      submissionCount,
+    ]
+  }
+}
+
 private class RefreshRateApiPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
     case 129:
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return NativePreferenceKind(rawValue: enumResultAsInt)
+      }
+      return nil
+    case 130:
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return NativeSwitchStrategy(rawValue: enumResultAsInt)
+      }
+      return nil
+    case 131:
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return NativeRequestStatus(rawValue: enumResultAsInt)
+      }
+      return nil
+    case 132:
       return DisplayInfoMessage.fromList(self.readValue() as! [Any?])
+    case 133:
+      return PreferenceMessage.fromList(self.readValue() as! [Any?])
+    case 134:
+      return RequestResultMessage.fromList(self.readValue() as! [Any?])
+    case 135:
+      return CapabilitiesMessage.fromList(self.readValue() as! [Any?])
+    case 136:
+      return DiagnosticsMessage.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -151,8 +410,29 @@ private class RefreshRateApiPigeonCodecReader: FlutterStandardReader {
 
 private class RefreshRateApiPigeonCodecWriter: FlutterStandardWriter {
   override func writeValue(_ value: Any) {
-    if let value = value as? DisplayInfoMessage {
+    if let value = value as? NativePreferenceKind {
       super.writeByte(129)
+      super.writeValue(value.rawValue)
+    } else if let value = value as? NativeSwitchStrategy {
+      super.writeByte(130)
+      super.writeValue(value.rawValue)
+    } else if let value = value as? NativeRequestStatus {
+      super.writeByte(131)
+      super.writeValue(value.rawValue)
+    } else if let value = value as? DisplayInfoMessage {
+      super.writeByte(132)
+      super.writeValue(value.toList())
+    } else if let value = value as? PreferenceMessage {
+      super.writeByte(133)
+      super.writeValue(value.toList())
+    } else if let value = value as? RequestResultMessage {
+      super.writeByte(134)
+      super.writeValue(value.toList())
+    } else if let value = value as? CapabilitiesMessage {
+      super.writeByte(135)
+      super.writeValue(value.toList())
+    } else if let value = value as? DiagnosticsMessage {
+      super.writeByte(136)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -177,6 +457,12 @@ class RefreshRateApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendabl
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol RefreshRateHostApi {
   func getDisplayInfo() throws -> DisplayInfoMessage
+  func getCapabilities() throws -> CapabilitiesMessage
+  func getDiagnostics() throws -> DiagnosticsMessage
+  func submitPreference(preference: PreferenceMessage) throws -> RequestResultMessage
+  func resetTouchBoost() throws -> RequestResultMessage
+  func startObservation() throws -> Bool
+  func stopObservation() throws
   func enable() throws
   func disable() throws
   func preferMax() throws
@@ -206,6 +492,86 @@ class RefreshRateHostApiSetup {
       }
     } else {
       getDisplayInfoChannel.setMessageHandler(nil)
+    }
+    let getCapabilitiesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.getCapabilities\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getCapabilitiesChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getCapabilities()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getCapabilitiesChannel.setMessageHandler(nil)
+    }
+    let getDiagnosticsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.getDiagnostics\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getDiagnosticsChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getDiagnostics()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getDiagnosticsChannel.setMessageHandler(nil)
+    }
+    let submitPreferenceChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.submitPreference\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      submitPreferenceChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let preferenceArg = args[0] as! PreferenceMessage
+        do {
+          let result = try api.submitPreference(preference: preferenceArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      submitPreferenceChannel.setMessageHandler(nil)
+    }
+    let resetTouchBoostChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.resetTouchBoost\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      resetTouchBoostChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.resetTouchBoost()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      resetTouchBoostChannel.setMessageHandler(nil)
+    }
+    let startObservationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.startObservation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      startObservationChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.startObservation()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      startObservationChannel.setMessageHandler(nil)
+    }
+    let stopObservationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.stopObservation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      stopObservationChannel.setMessageHandler { _, reply in
+        do {
+          try api.stopObservation()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      stopObservationChannel.setMessageHandler(nil)
     }
     let enableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.refresh_rate.RefreshRateHostApi.enable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

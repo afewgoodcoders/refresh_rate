@@ -7,26 +7,11 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
     private weak var view: NSView?
     private var flutterApi: RefreshRateFlutterApi?
     private var observers: [NSObjectProtocol] = []
-    private var control: FlutterMethodChannel?
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance = RefreshRatePlugin()
         instance.view = registrar.view
         instance.flutterApi = RefreshRateFlutterApi(binaryMessenger: registrar.messenger)
         RefreshRateHostApiSetup.setUp(binaryMessenger: registrar.messenger, api: instance)
-        let control = FlutterMethodChannel(name: "refresh_rate/control", binaryMessenger: registrar.messenger)
-        instance.control = control
-        control.setMethodCallHandler { [weak instance] call, result in
-            guard let self = instance else { result(FlutterError(code: "detached", message: "Engine detached", details: nil)); return }
-            switch call.method {
-            case "capabilities": result(["query": true, "engineControl": false])
-            case "request":
-                let clear = (call.arguments as? [String: Any])?["kind"] as? String == "system"
-                result(["status": clear ? "submitted" : "unsupported", "backend": clear ? "clearOwnedPreference" : "unavailable",
-                    "scope": "flutterEngine", "message": "A helper display link does not control the Flutter engine."])
-            case "diagnostics": result(["source": "coreGraphicsDisplayMode", "displayId": self.displayId.map { String($0) } as Any])
-            default: result(FlutterMethodNotImplemented)
-            }
-        }
         var notifications = [NSWindow.didChangeScreenNotification, NSApplication.didChangeScreenParametersNotification,
             ProcessInfo.thermalStateDidChangeNotification]
         if #available(macOS 12.0, *) { notifications.append(Notification.Name.NSProcessInfoPowerStateDidChange) }
@@ -67,6 +52,23 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
             thermalStateIndex: thermal, hasAdaptiveRefreshRate: vrr,
             monitorCount: Int64(NSScreen.screens.count))
     }
+    func getCapabilities() -> CapabilitiesMessage {
+        CapabilitiesMessage(query: true, engineControl: false, presentationObservation: false,
+            callbackObservation: false)
+    }
+    func getDiagnostics() -> DiagnosticsMessage {
+        DiagnosticsMessage(source: "coreGraphicsDisplayMode", displayId: displayId.map { String($0) })
+    }
+    func submitPreference(preference: PreferenceMessage) -> RequestResultMessage {
+        let clear = preference.kind == .system
+        return RequestResultMessage(status: clear ? .submitted : .unsupported,
+            backend: clear ? "clearOwnedPreference" : "unavailable", scope: "flutterEngine",
+            message: "No qualified per-engine control integration; system scheduling remains in control.",
+            preference: preference)
+    }
+    func resetTouchBoost() -> RequestResultMessage {
+        RequestResultMessage(status: .unsupported, backend: "unavailable", scope: "flutterEngine")
+    }
     private func unsupported() throws { throw PigeonError(code: "unsupported", message: "No qualified Flutter engine rate-control backend", details: nil) }
     func enable() throws { try unsupported() }
     func preferMax() throws { try unsupported() }
@@ -77,8 +79,9 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
     func setCategory(categoryIndex: Int64) throws { try unsupported() }
     func setTouchBoost(enabled: Bool) throws { try unsupported() }
     func isSupported() throws -> Bool { false }
+    func startObservation() -> Bool { false }
+    func stopObservation() {}
     public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
-        control?.setMethodCallHandler(nil); control = nil
         observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
         RefreshRateHostApiSetup.setUp(binaryMessenger: registrar.messenger, api: nil)
     }
