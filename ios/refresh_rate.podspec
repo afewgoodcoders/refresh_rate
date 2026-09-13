@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'refresh_rate'
-  s.version          = '1.0.2'
+  s.version          = '1.0.3'
   s.summary          = 'Control display refresh rates in Flutter.'
   s.description      = <<-DESC
 Cross-platform Flutter plugin to query and control display refresh rates.

@@ -1,16 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.0.3
 
-Includes breaking API and behavior changes. Device qualification remains in progress.
+- Fixed FPS lows to use frame intervals instead of pipeline duration, and kept benchmark statistics for the full session.
+- Added session pause/resume handling, workload targets, tags and markers. Separated UI/raster overruns from pipeline latency and frame cadence.
+- Added awaitable refresh requests with independent ownership, scopes, activity-based policies and content-rate preferences.
+- Added Android surface voting, API 35 category hints and API 36 ARR/at-least support.
+- Removed the iOS display-link swizzle. Engine-control requests on iOS and macOS now report unsupported; display queries and Flutter frame measurements remain available.
+- Fixed desktop monitor selection and web callback-rate reporting. Replaced continuous overlay tickers with event-driven updates.
+- Added telemetry exports, JSON/CSV/Markdown reports, benchmark comparisons and CI thresholds.
+- Added platform build checks, regression coverage and Apple source-parity checks.
 
-- Separate Flutter cadence, phase overruns, pipeline latency and native observations; correct FPS lows and preserve whole-session statistics.
-- Add event-time session boundaries, lifecycle exclusions, tags, markers, workload coverage, versioned exports and evidence-aware CI comparisons.
-- Add awaitable control results, capabilities, owned leases, declarative scopes, explicit activity policies, animation and content-state adapters.
-- Implement qualified Android surface votes and API 36 support; remove default Apple display-link interception and report unsupported engine control explicitly.
-- Correct desktop monitor selection and web callback measurement; replace continuous overlay tickers with bounded event-driven updates.
-- Add optional bounded telemetry, timeline/service-extension integration, regression tests and cross-platform CI configuration.
-- These changes alter public API and metric semantics. See `README.md` for updated API usage and metric definitions.
+**Breaking changes:** Control methods now return request results, reset methods preserve independently owned requests, and report metrics use revised definitions with schema version 2. `observedAvgHz` is nullable. See `README.md` for updated API usage and compatibility notes.
 
 ## 1.0.2
 
