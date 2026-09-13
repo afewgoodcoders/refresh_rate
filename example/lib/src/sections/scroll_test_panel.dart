@@ -53,7 +53,7 @@ class ScrollTestPanel extends StatelessWidget {
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: laneColor.withValues(alpha: 0.16),
+                          color: laneColor.withAlpha((255 * (0.16)).round()),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         alignment: Alignment.center,

@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.view.Display
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -23,12 +24,16 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.BinaryMessenger
 import `in`.qoder.refresh_rate.generated.DisplayInfoMessage
 import `in`.qoder.refresh_rate.generated.RefreshRateFlutterApi
 import `in`.qoder.refresh_rate.generated.RefreshRateHostApi
 
 class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
     private var activity: Activity? = null
+    private var messenger: BinaryMessenger? = null
+    private var foreignFlutterView = false
+    private var lastNativeRequest: Map<String, Any?>? = null
     private var context: Context? = null
     private var flutterApi: RefreshRateFlutterApi? = null
     private var control: MethodChannel? = null
@@ -47,6 +52,15 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
     private var submittedRate: Float? = null
     private val handler = Handler(Looper.getMainLooper())
     private var boostGeneration = 0
+    private var pendingTouchBoost: Boolean? = null
+    private var originalTouchBoost: Boolean? = null
+    private var submittedTouchBoost: Boolean? = null
+    private val sustainedOwners = mutableSetOf<String>()
+    private var sustainedBaseline: Boolean? = null
+    private var sustainedApplied = false
+    private var lastHeadroomAt = -10000L
+    private var lastHeadroomForecast = 0
+    private var lastHeadroom: Map<String, Any?>? = null
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) { handler.post { reapply() } }
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) { reapply() }
@@ -58,6 +72,7 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
     }
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        messenger = binding.binaryMessenger
         RefreshRateHostApi.setUp(binding.binaryMessenger, this)
         flutterApi = RefreshRateFlutterApi(binding.binaryMessenger)
         control = MethodChannel(binding.binaryMessenger, "refresh_rate/control").also { channel ->
@@ -69,17 +84,53 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
                             "windowPreferences" to (Build.VERSION.SDK_INT >= 23),
                             "categoryHints" to (Build.VERSION.SDK_INT >= 35),
                             "atLeast" to (Build.VERSION.SDK_INT >= 36),
-                            "contentMatching" to (Build.VERSION.SDK_INT >= 30)))
+                            "contentMatching" to (Build.VERSION.SDK_INT >= 30),
+                            "touchBoost" to (Build.VERSION.SDK_INT >= 35),
+                            "thermalHeadroom" to (Build.VERSION.SDK_INT >= 30),
+                            "sustainedPerformance" to (Build.VERSION.SDK_INT >= 24 &&
+                                (context?.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isSustainedPerformanceModeSupported == true)))
+                        "thermalHeadroom" -> result.success(readThermalHeadroom(
+                            (call.argument<Number>("forecastSeconds"))?.toInt() ?: 10))
+                        "acquireSustained" -> {
+                            val id = call.argument<String>("id") ?: throw IllegalArgumentException("Missing lease id")
+                            val baseline = call.argument<Boolean>("previousEnabled") ?: throw IllegalArgumentException("Known prior sustained state required")
+                            val pm = context?.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                            if (Build.VERSION.SDK_INT < 24 || pm?.isSustainedPerformanceModeSupported != true) {
+                                result.success(response("unsupported", message = "Sustained performance mode is not supported"))
+                            } else {
+                                require(id.length <= 128 && sustainedOwners.size < 128) { "Sustained owner limit exceeded" }
+                                require(sustainedBaseline == null || sustainedBaseline == baseline) { "Conflicting sustained baseline" }
+                                sustainedBaseline = baseline; sustainedOwners.add(id)
+                                result.success(applySustained())
+                            }
+                        }
+                        "releaseSustained" -> {
+                            val id = call.argument<String>("id")
+                            if (sustainedOwners.remove(id)) {
+                                if (sustainedOwners.isEmpty()) { restoreSustained(); sustainedBaseline = null }
+                                result.success(response("submitted", "sustainedPerformance"))
+                            } else result.success(response("superseded", message = "No sustained preference owned by this lease"))
+                        }
+                        "resetTouchBoost" -> {
+                            restoreTouchBoost(); pendingTouchBoost = null
+                            result.success(response(if (Build.VERSION.SDK_INT >= 35) "submitted" else "unsupported", "touchBoost"))
+                        }
                         "request" -> {
                             @Suppress("UNCHECKED_CAST")
                             val args = call.arguments as? Map<String, Any?> ?: emptyMap()
                             boostGeneration++
                             pending = args
-                            result.success(applyRequest(args))
+                            result.success(recordRequest(args))
                         }
                         "diagnostics" -> {
                             val d = getDisplay()
                             result.success(mapOf("displayId" to d?.displayId?.toString(),
+                                "activityAttached" to (activity != null),
+                                "lastNativeRequest" to lastNativeRequest,
+                                "surfaceAvailable" to (surfaceView?.holder?.surface?.isValid == true),
+                                "ownedSustainedRequests" to sustainedOwners.size,
+                                "sustainedPreferenceApplied" to sustainedApplied,
+                                "touchBoostEnabled" to if (Build.VERSION.SDK_INT >= 35) activity?.window?.getFrameRateBoostOnTouchEnabled() else null,
                                 "source" to "androidDisplay", "currentHz" to d?.refreshRate?.toDouble(),
                                 "suggestedNormalHz" to if (Build.VERSION.SDK_INT >= 36) d?.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_NORMAL)?.toDouble() else null,
                                 "suggestedHighHz" to if (Build.VERSION.SDK_INT >= 36) d?.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_HIGH)?.toDouble() else null))
@@ -92,7 +143,8 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
         registerListeners()
     }
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        detachActivity(); pending = null; boostGeneration++
+        detachActivity(); pending = null; pendingTouchBoost = null
+        sustainedOwners.clear(); sustainedBaseline = null; boostGeneration++
         handler.removeCallbacksAndMessages(null)
         RefreshRateHostApi.setUp(binding.binaryMessenger, null)
         control?.setMethodCallHandler(null); control = null
@@ -101,17 +153,18 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
         val pm = context?.getSystemService(Context.POWER_SERVICE) as? PowerManager
         if (Build.VERSION.SDK_INT >= 29) thermalListener?.let { pm?.removeThermalStatusListener(it) }
         powerReceiver?.let { context?.unregisterReceiver(it) }; powerReceiver = null
-        flutterApi = null; context = null
+        flutterApi = null; context = null; messenger = null
     }
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
         activity?.window?.decorView?.viewTreeObserver?.addOnGlobalLayoutListener(layoutListener)
-        bindSurface(); reapply(); publish()
+        bindSurface(); reapply(); applyTouchBoost(); applySustained(); publish()
     }
     override fun onDetachedFromActivityForConfigChanges() { detachActivity() }
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { onAttachedToActivity(binding) }
     override fun onDetachedFromActivity() { detachActivity(); pending = null }
     private fun detachActivity() {
+        restoreTouchBoost(); restoreSustained()
         clearOwnedPreference()
         surfaceView?.holder?.removeCallback(surfaceCallback); surfaceView = null
         activity?.window?.decorView?.viewTreeObserver?.removeOnGlobalLayoutListener(layoutListener)
@@ -119,7 +172,17 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
     }
     private fun bindSurface(): Boolean {
         val candidates = mutableListOf<FlutterSurfaceView>()
+        foreignFlutterView = false
         fun visit(view: View, insideFlutter: Boolean) {
+            if (view is FlutterView) {
+                val executor = view.attachedFlutterEngine?.dartExecutor
+                // Plugin bindings use the executor on some Flutter versions
+                // and its BinaryMessenger facade on others.
+                if (executor !== messenger && executor?.binaryMessenger !== messenger) {
+                    foreignFlutterView = true
+                    return
+                }
+            }
             val inside = insideFlutter || view is FlutterView
             if (inside && view is FlutterSurfaceView && view.isAttachedToWindow && view.visibility == View.VISIBLE) candidates.add(view)
             if (view is ViewGroup) for (i in 0 until view.childCount) visit(view.getChildAt(i), inside)
@@ -172,7 +235,9 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
         val maxRate = rates.maxOfOrNull { it.refreshRate } ?: d.refreshRate
         val requested = when (kind) {
             "content", "atLeast" -> fps!!
-            else -> maxRate
+            else -> if (Build.VERSION.SDK_INT >= 36) {
+                d.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_HIGH).takeIf { it.isFinite() && it > 0f } ?: maxRate
+            } else maxRate
         }
         if (requested == 0f) { clearOwnedPreference(); return response("submitted", "clearOwnedPreference") }
         val surface = surfaceView?.holder?.surface?.takeIf { it.isValid }
@@ -192,6 +257,7 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
         }
         if (kind == "content" || kind == "atLeast") return response("unavailable", message = "No uniquely identified live FlutterSurfaceView; content semantics cannot be preserved by window fallback")
         if (Build.VERSION.SDK_INT < 23) return response("unsupported")
+        if (foreignFlutterView) return response("unavailable", message = "Window fallback would affect another Flutter engine")
         val window = activity!!.window
         val params = window.attributes
         if (originalMode == null) { originalMode = params.preferredDisplayModeId; originalRate = params.preferredRefreshRate }
@@ -225,7 +291,14 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
         }
         categoryView = null; originalCategory = null; submittedCategory = null
     }
-    private fun reapply() { pending?.let { try { applyRequest(it) } catch (_: Exception) { /* Later queries expose unavailable target. */ } } }
+    private fun recordRequest(args: Map<String, Any?>): Map<String, Any?> {
+        val outcome = try { applyRequest(args) } catch (error: Exception) {
+            response("failed", message = error.message)
+        }
+        lastNativeRequest = outcome + mapOf("preference" to args, "observedAtMs" to System.currentTimeMillis())
+        return outcome
+    }
+    private fun reapply() { pending?.let { recordRequest(it) } }
     override fun getDisplayInfo(): DisplayInfoMessage {
         val display = getDisplay()
         val modes = if (Build.VERSION.SDK_INT >= 23) display?.supportedModes ?: emptyArray() else emptyArray()
@@ -256,7 +329,55 @@ class RefreshRatePlugin : FlutterPlugin, ActivityAware, RefreshRateHostApi {
         pending = mapOf("kind" to "category", "category" to categoryIndex); applyRequest(pending!!)
     }
     override fun setTouchBoost(enabled: Boolean) {
-        if (Build.VERSION.SDK_INT >= 35) activity?.window?.setFrameRateBoostOnTouchEnabled(enabled)
+        check(Build.VERSION.SDK_INT >= 35) { "Touch boost requires Android API 35" }
+        pendingTouchBoost = enabled
+        applyTouchBoost()
+    }
+    private fun applyTouchBoost() {
+        if (Build.VERSION.SDK_INT < 35) return
+        val value = pendingTouchBoost ?: return
+        val window = activity?.window ?: return
+        if (originalTouchBoost == null) originalTouchBoost = window.getFrameRateBoostOnTouchEnabled()
+        window.setFrameRateBoostOnTouchEnabled(value); submittedTouchBoost = value
+    }
+    private fun restoreTouchBoost() {
+        if (Build.VERSION.SDK_INT >= 35) {
+            val window = activity?.window
+            if (window != null && originalTouchBoost != null && window.getFrameRateBoostOnTouchEnabled() == submittedTouchBoost) {
+                window.setFrameRateBoostOnTouchEnabled(originalTouchBoost!!)
+            }
+        }
+        originalTouchBoost = null; submittedTouchBoost = null
+    }
+    private fun applySustained(): Map<String, Any?> {
+        if (sustainedOwners.isEmpty()) return response("superseded")
+        if (Build.VERSION.SDK_INT < 24) return response("unsupported")
+        val window = activity?.window ?: return response("unavailable", message = "Waiting for attached activity")
+        window.setSustainedPerformanceMode(true); sustainedApplied = true
+        return response("submitted", "sustainedPerformance", "Consistency preference; not a maximum-performance guarantee")
+    }
+    private fun restoreSustained() {
+        if (Build.VERSION.SDK_INT >= 24 && sustainedApplied) {
+            activity?.window?.setSustainedPerformanceMode(sustainedBaseline ?: false)
+        }
+        sustainedApplied = false
+    }
+    private fun readThermalHeadroom(forecast: Int): Map<String, Any?> {
+        require(forecast in 0..60) { "Forecast must be 0..60 seconds" }
+        if (Build.VERSION.SDK_INT < 30) return mapOf("forecastSeconds" to forecast, "unavailableReason" to "Thermal headroom requires API 30")
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHeadroomAt < 10000) {
+            if (forecast == lastHeadroomForecast) return (lastHeadroom ?: emptyMap()) + ("cached" to true)
+            return mapOf("forecastSeconds" to forecast, "unavailableReason" to "Another forecast was sampled less than ten seconds ago")
+        }
+        val pm = context?.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val value = pm?.getThermalHeadroom(forecast)?.takeIf { it.isFinite() && it >= 0f }
+        lastHeadroomAt = now; lastHeadroomForecast = forecast
+        val reading = mapOf<String, Any?>("value" to value?.toDouble(), "forecastSeconds" to forecast,
+            "observedAtMs" to System.currentTimeMillis(), "cached" to false,
+            "unavailableReason" to if (value == null) "Device did not provide thermal headroom" else null)
+        lastHeadroom = reading
+        return reading
     }
     override fun isSupported(): Boolean = Build.VERSION.SDK_INT >= 23
     private fun publish() { handler.post { flutterApi?.onDisplayInfoChanged(getDisplayInfo()) {} } }

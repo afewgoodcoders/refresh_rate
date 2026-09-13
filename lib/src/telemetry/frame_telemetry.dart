@@ -10,6 +10,7 @@ class FrameTelemetry {
   FrameTelemetry(
       {required this.sink,
       this.sampleEvery = 10,
+      this.includeRenderingContext = false,
       this.capacity = 256,
       this.batchSize = 64,
       this.flushInterval = const Duration(seconds: 1),
@@ -22,7 +23,8 @@ class FrameTelemetry {
         sinkTimeout <= Duration.zero) {
       throw ArgumentError('Invalid telemetry configuration');
     }
-    _unsubscribe = FrameCollector.instance.subscribe(_accept);
+    _unsubscribe = FrameCollector.instance
+        .subscribe(_accept, includeRenderingContext: includeRenderingContext);
   }
 
   /// Application-provided asynchronous export callback; no network is configured.
@@ -30,6 +32,9 @@ class FrameTelemetry {
 
   /// Exports every nth timing record.
   final int sampleEvery;
+
+  /// Opt-in engine raster cache counters; no allocation sampling or heap scan.
+  final bool includeRenderingContext;
 
   /// Maximum queued samples before dropping the oldest.
   final int capacity;
@@ -51,6 +56,12 @@ class FrameTelemetry {
 
   /// Sink invocations that failed or timed out.
   int failedBatches = 0;
+
+  /// Samples in failed or timed-out batches; remote delivery is unconfirmed.
+  int failedSamples = 0;
+
+  /// Samples whose sink callback completed before its timeout.
+  int exportedSamples = 0;
 
   /// Most recent sink failure, available for application diagnostics.
   Object? lastError;
@@ -82,8 +93,11 @@ class FrameTelemetry {
       batch.add(_queue.removeFirst());
     }
     final operation = Future<void>.sync(() => sink(List.unmodifiable(batch)));
-    _inFlight = operation.timeout(sinkTimeout).catchError((Object error) {
+    _inFlight = operation.timeout(sinkTimeout).then((_) {
+      exportedSamples += batch.length;
+    }).catchError((Object error) {
       failedBatches++;
+      failedSamples += batch.length;
       lastError = error;
       if (error is TimeoutException) _sinkTimedOut = true;
     }).whenComplete(() {

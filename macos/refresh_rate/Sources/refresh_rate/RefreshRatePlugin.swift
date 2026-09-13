@@ -27,7 +27,10 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
             default: result(FlutterMethodNotImplemented)
             }
         }
-        for name in [NSWindow.didChangeScreenNotification, NSApplication.didChangeScreenParametersNotification] {
+        var notifications = [NSWindow.didChangeScreenNotification, NSApplication.didChangeScreenParametersNotification,
+            ProcessInfo.thermalStateDidChangeNotification]
+        if #available(macOS 12.0, *) { notifications.append(Notification.Name.NSProcessInfoPowerStateDidChange) }
+        for name in notifications {
             instance.observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak instance] _ in
                 guard let self = instance, let info = try? self.getDisplayInfo() else { return }
                 self.flutterApi?.onDisplayInfoChanged(info: info) { _ in }
@@ -48,9 +51,20 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
             maxRate = Double(screen.maximumFramesPerSecond)
             vrr = screen.minimumRefreshInterval != screen.maximumRefreshInterval
         }
+        var lowPower: Bool? = nil
+        if #available(macOS 12.0, *) { lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled }
+        let thermal: Int64?
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = 0
+        case .fair: thermal = 1
+        case .serious: thermal = 2
+        case .critical: thermal = 3
+        @unknown default: thermal = nil
+        }
         return DisplayInfoMessage(currentRate: (current?.refreshRate ?? 0) > 0 ? current?.refreshRate : nil,
             maxRate: maxRate, minRate: unique.min(), supportedRates: unique,
-            isVariableRefreshRate: vrr, engineTargetRate: nil, hasAdaptiveRefreshRate: vrr,
+            isVariableRefreshRate: vrr, engineTargetRate: nil, isLowPowerMode: lowPower,
+            thermalStateIndex: thermal, hasAdaptiveRefreshRate: vrr,
             monitorCount: Int64(NSScreen.screens.count))
     }
     private func unsupported() throws { throw PigeonError(code: "unsupported", message: "No qualified Flutter engine rate-control backend", details: nil) }

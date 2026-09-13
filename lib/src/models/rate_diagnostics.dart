@@ -59,6 +59,7 @@ class RateDiagnostics {
       required this.displayModeMaxHz,
       required this.capabilities,
       this.displayId,
+      this.nativeMetadata = const {},
       this.suggestedNormalHz,
       this.suggestedHighHz});
 
@@ -83,6 +84,9 @@ class RateDiagnostics {
   /// Native display identity when exposed by the backend.
   final String? displayId;
 
+  /// Backend-specific attachment and owned-request evidence.
+  final Map<Object?, Object?> nativeMetadata;
+
   /// Android API 36 display-defined normal cadence, when available.
   final double? suggestedNormalHz;
 
@@ -91,6 +95,21 @@ class RateDiagnostics {
 
   /// Unavailable: Flutter timing records alone do not establish presentation FPS.
   double? get presentedFps => null;
+
+  /// Complete source-qualified snapshot, including operation capabilities.
+  Map<String, Object?> toMap() => {
+        'requestedPreference': requestedPreference.toMap(),
+        'nativeReportedDisplayHz': nativeReportedDisplayHz.toMap(),
+        'engineReportedDisplayHz': engineReportedDisplayHz.toMap(),
+        'nativeCallbackCadenceHz': nativeCallbackCadenceHz.toMap(),
+        'displayModeMaxHz': displayModeMaxHz.toMap(),
+        'capabilities': capabilities.toMap(),
+        'displayId': displayId,
+        'nativeMetadata': nativeMetadata,
+        'suggestedNormalHz': suggestedNormalHz,
+        'suggestedHighHz': suggestedHighHz,
+        'presentedFps': null,
+      };
 }
 
 /// Display enumeration reported by Flutter, separate from hardware VRR evidence.

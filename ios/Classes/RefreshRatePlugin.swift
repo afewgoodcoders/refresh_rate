@@ -4,7 +4,7 @@ import QuartzCore
 
 /// Query and opt-in callback observation. No process-wide display-link hooks.
 public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
-    private weak var viewController: UIViewController?
+    private var registrar: FlutterPluginRegistrar?
     private var flutterApi: RefreshRateFlutterApi?
     private var channel: FlutterMethodChannel?
     private var observers: [NSObjectProtocol] = []
@@ -15,7 +15,7 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
     private var sampleCount = 0
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance = RefreshRatePlugin()
-        instance.viewController = registrar.viewController
+        instance.registrar = registrar
         instance.flutterApi = RefreshRateFlutterApi(binaryMessenger: registrar.messenger())
         RefreshRateHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: instance)
         let channel = FlutterMethodChannel(name: "refresh_rate/control", binaryMessenger: registrar.messenger())
@@ -43,7 +43,9 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
         registrar.publish(instance)
         instance.registerObservers()
     }
-    private var screen: UIScreen? { viewController?.viewIfLoaded?.window?.screen }
+    // Implicit engines may register plugins before attaching their view.
+    // Resolve the engine's current view rather than caching a nil controller.
+    private var screen: UIScreen? { registrar?.viewController?.viewIfLoaded?.window?.screen }
     func getDisplayInfo() throws -> DisplayInfoMessage {
         DisplayInfoMessage(currentRate: nil,
             maxRate: screen.map { Double($0.maximumFramesPerSecond) }, minRate: nil,
@@ -98,6 +100,7 @@ public class RefreshRatePlugin: NSObject, FlutterPlugin, RefreshRateHostApi {
         }
     }
     public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+        self.registrar = nil
         stopObservation(); channel?.setMethodCallHandler(nil); channel = nil
         observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
         RefreshRateHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: nil)

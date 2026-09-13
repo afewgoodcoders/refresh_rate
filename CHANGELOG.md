@@ -3,15 +3,20 @@
 ## 1.0.3
 
 - Fixed FPS lows to use frame intervals instead of pipeline duration, and kept benchmark statistics for the full session.
-- Added session pause/resume handling, workload targets, tags and markers. Separated UI/raster overruns from pipeline latency and frame cadence.
-- Added awaitable refresh requests with independent ownership, scopes, activity-based policies and content-rate preferences.
-- Added Android surface voting, API 35 category hints and API 36 ARR/at-least support.
+- Added session pause/resume handling, workload targets and display context. Session durations use monotonic time; detected clock discontinuities make coverage incomplete.
+- Added stutter episodes and recovery tracking, route tags, readiness and input-to-next-frame markers, and optional raster-cache context. Separated UI/raster overruns from pipeline latency and frame cadence.
+- Added awaitable refresh requests with independent ownership, scopes, activity-based policies and content-rate preferences. Repeated playback updates return the current backend result.
+- Added policy shadow mode and application-owned quality advice with pressure/recovery thresholds. Unsupported policy preferences fall back to system scheduling.
+- Added Android surface voting, API 35 category hints and API 36 ARR/at-least support. High-rate requests use supported display suggestions. Surface requests match the registering engine, and diagnostics include deferred request outcomes.
+- Added Android thermal-headroom observations and foreground polling, plus independently owned sustained-performance requests with a caller-supplied restoration baseline. Touch-boost preferences restore their captured state on reset/detachment and reapply after recreation.
 - Removed the iOS display-link swizzle. Engine-control requests on iOS and macOS now report unsupported; display queries and Flutter frame measurements remain available.
-- Fixed desktop monitor selection and web callback-rate reporting. Replaced continuous overlay tickers with event-driven updates.
-- Added telemetry exports, JSON/CSV/Markdown reports, benchmark comparisons and CI thresholds.
-- Added platform build checks, regression coverage and Apple source-parity checks.
+- Fixed iOS display lookup after engine attachment, desktop monitor selection, web frame timestamps and short callback-rate observations. Added macOS power/thermal observations.
+- Added configuration checks, bounded diagnostic bundles and a completed-session report viewer. Replaced continuous overlay tickers with event-driven updates and added a completed-session service endpoint for DevTools clients.
+- Added JSON/CSV/Markdown reports, NDJSON telemetry, embedded metric definitions, tag allowlists, redaction, export-size limits and sink delivery counters.
+- Added benchmark thresholds and repeated-run comparisons with workload, coverage and environment checks.
+- Added platform build checks, real-plugin integration tests, Android Home/resume/rotation coverage and Apple source-parity checks. Fixed example compatibility with Flutter 3.24.
 
-**Breaking changes:** Control methods now return request results, reset methods preserve independently owned requests, and report metrics use revised definitions with schema version 2. `observedAvgHz` is nullable. See `README.md` for updated API usage and compatibility notes.
+**Breaking changes:** Control methods now return request results, reset methods preserve independently owned requests, and report metrics use revised definitions with schema version 2. `observedAvgHz` is nullable. See [Upgrading from 1.0.2](README.md#upgrading-from-102) for migration notes.
 
 ## 1.0.2
 

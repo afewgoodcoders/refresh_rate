@@ -3,7 +3,7 @@ description: >-
   Request display refresh rates, measure Flutter frame cadence and phase
   timings, and export source-qualified benchmark reports and telemetry.
 version: 1.0.3
-homepage: https://qoder.in/resources/refresh_rate
+homepage: https://www.afewgoodcoders.com
 repository: https://github.com/afewgoodcoders/refresh_rate
 issue_tracker: https://github.com/afewgoodcoders/refresh_rate/issues
 documentation: https://pub.dev/documentation/refresh_rate/latest/
@@ -16,13 +16,10 @@ topics:
   - ui
 
 screenshots:
-  - description: "Live FPS overlay showing 120 FPS with frame budget diagnostics"
+  - description: "Illustrative FPS overlay layout with frame budget diagnostics"
     path: screenshots/fps.png
-  - description: "Hz badge confirming 120Hz refresh rate on a real device"
+  - description: "Illustrative refresh-rate badge layout"
     path: screenshots/hz.png
-
-funding:
-  - https://github.com/sponsors/qoder-official
 
 environment:
   sdk: ^3.5.0

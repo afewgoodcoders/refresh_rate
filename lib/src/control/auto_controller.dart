@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/widgets.dart';
 import '../models/display_info.dart';
 import '../models/enums.dart';
@@ -19,6 +20,33 @@ enum RefreshRatePolicy {
   battery,
 }
 
+/// A policy proposal is separate from native submission/fulfilment.
+class PolicyDecision {
+  /// Creates a timestamped proposed preference.
+  const PolicyDecision(
+      this.preference, this.reason, this.shadowMode, this.timestamp);
+
+  /// Proposed policy preference before higher-priority request arbitration.
+  final RatePreference preference;
+
+  /// Activity, constraint or capability reason.
+  final String reason;
+
+  /// True when no native preference was submitted by this policy.
+  final bool shadowMode;
+
+  /// UTC time of the proposal.
+  final DateTime timestamp;
+
+  /// Serializable policy evidence.
+  Map<String, Object?> toMap() => {
+        'preference': preference.toMap(),
+        'reason': reason,
+        'shadowMode': shadowMode,
+        'timestamp': timestamp.toIso8601String()
+      };
+}
+
 /// Opt-in policies driven by explicit workload activity, not FPS feedback.
 /// Use beginActivity/endActivity or RefreshRateInteraction around interactive UI.
 class RefreshRateAutoController {
@@ -27,6 +55,9 @@ class RefreshRateAutoController {
     this.controller,
     Stream<DisplayInfo> changes, {
     this.policy = RefreshRatePolicy.balanced,
+    this.shadowMode = false,
+    this.capabilities =
+        const RefreshRateCapabilities(surfaceVoting: true, categoryHints: true),
     this.idleDelay = const Duration(milliseconds: 800),
     required DisplayInfo initialInfo,
   }) : _info = initialInfo {
@@ -51,6 +82,29 @@ class RefreshRateAutoController {
 
   /// Policy that maps explicit activity to a refresh preference.
   final RefreshRatePolicy policy;
+
+  /// Records proposals without acquiring or releasing backend requests.
+  final bool shadowMode;
+
+  /// Qualified operation support; unsupported battery categories fall back to system.
+  RefreshRateCapabilities capabilities;
+  final _proposals = Queue<PolicyDecision>();
+  final _decisions = StreamController<PolicyDecision>.broadcast();
+  RatePreference? _lastProposal;
+  String? _lastReason;
+
+  /// Bounded latest proposals, including shadow decisions.
+  List<PolicyDecision> get history => List.unmodifiable(_proposals);
+
+  /// Proposed decisions; native outcomes are on RateController.decisions.
+  Stream<PolicyDecision> get decisions => _decisions.stream;
+
+  /// Refreshes capabilities after attachment or asynchronous initialization.
+  void updateCapabilities(RefreshRateCapabilities value) {
+    if (_disposed) return;
+    capabilities = value;
+    _update();
+  }
 
   /// Grace period after the final activity ends.
   final Duration idleDelay;
@@ -89,13 +143,41 @@ class RefreshRateAutoController {
         _info.thermalState == ThermalState.serious ||
         _info.thermalState == ThermalState.critical;
     final active = _activities.isNotEmpty || (_idle?.isActive ?? false);
-    final shouldRequest = _foreground &&
+    final supported = policy == RefreshRatePolicy.battery
+        ? capabilities.categoryHints
+        : (capabilities.surfaceVoting ||
+            capabilities.windowPreferences ||
+            capabilities.engineControl);
+    final shouldRequest = supported &&
+        _foreground &&
         active &&
         !constrained &&
         policy != RefreshRatePolicy.system;
     final desired = policy == RefreshRatePolicy.battery
         ? const RatePreference.category(2)
         : const RatePreference.high();
+    final proposed = shouldRequest ? desired : const RatePreference.system();
+    final reason = !_foreground
+        ? 'background'
+        : constrained
+            ? 'powerOrThermal'
+            : !active
+                ? 'idle'
+                : policy == RefreshRatePolicy.system
+                    ? 'systemPolicy'
+                    : !supported
+                        ? 'unsupportedPolicy'
+                        : 'activity';
+    if (proposed != _lastProposal || reason != _lastReason) {
+      _lastProposal = proposed;
+      _lastReason = reason;
+      final decision =
+          PolicyDecision(proposed, reason, shadowMode, DateTime.now().toUtc());
+      if (_proposals.length == 200) _proposals.removeFirst();
+      _proposals.add(decision);
+      _decisions.add(decision);
+    }
+    if (shadowMode) return;
     if (!shouldRequest) {
       _lease?.release();
       _lease = null;
@@ -116,5 +198,6 @@ class RefreshRateAutoController {
     await _subscription?.cancel();
     await _lease?.release();
     _activities.clear();
+    unawaited(_decisions.close());
   }
 }

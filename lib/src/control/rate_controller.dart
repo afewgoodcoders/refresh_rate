@@ -172,7 +172,10 @@ class RefreshRateCapabilities {
       this.engineControl = false,
       this.presentationObservation = false,
       this.atLeast = false,
-      this.contentMatching = false});
+      this.contentMatching = false,
+      this.touchBoost = false,
+      this.thermalHeadroom = false,
+      this.sustainedPerformance = false});
 
   /// Whether the platform exposes display information.
   final bool query;
@@ -198,6 +201,30 @@ class RefreshRateCapabilities {
   /// Whether fixed-source content semantics can be submitted.
   final bool contentMatching;
 
+  /// Native touch boost with a public baseline getter.
+  final bool touchBoost;
+
+  /// Native thermal-headroom API availability; individual readings may be null.
+  final bool thermalHeadroom;
+
+  /// Device-declared sustained performance support.
+  final bool sustainedPerformance;
+
+  /// Serializes explicit per-operation support.
+  Map<String, Object?> toMap() => {
+        'query': query,
+        'surfaceVoting': surfaceVoting,
+        'windowPreferences': windowPreferences,
+        'categoryHints': categoryHints,
+        'engineControl': engineControl,
+        'presentationObservation': presentationObservation,
+        'atLeast': atLeast,
+        'contentMatching': contentMatching,
+        'touchBoost': touchBoost,
+        'thermalHeadroom': thermalHeadroom,
+        'sustainedPerformance': sustainedPerformance,
+      };
+
   /// Decodes explicit capabilities; absent flags remain unsupported.
   factory RefreshRateCapabilities.fromMap(Map<Object?, Object?> map) =>
       RefreshRateCapabilities(
@@ -208,7 +235,10 @@ class RefreshRateCapabilities {
           engineControl: map['engineControl'] == true,
           presentationObservation: map['presentationObservation'] == true,
           atLeast: map['atLeast'] == true,
-          contentMatching: map['contentMatching'] == true);
+          contentMatching: map['contentMatching'] == true,
+          touchBoost: map['touchBoost'] == true,
+          thermalHeadroom: map['thermalHeadroom'] == true,
+          sustainedPerformance: map['sustainedPerformance'] == true);
 }
 
 /// Timestamped request decision and actual submission result.
@@ -228,6 +258,19 @@ class RefreshRateDecision {
 
   /// Observed outcome of the backend submission.
   final RateRequestResult result;
+
+  /// Structured history preserves source/scope without claiming fulfilment.
+  Map<String, Object?> toMap() => {
+        'timestamp': timestamp.toIso8601String(),
+        'owner': owner,
+        'reason': reason,
+        'status': result.status.name,
+        'backend': result.backend,
+        'scope': result.scope,
+        'message': result.message,
+        'preference': result.preference.toMap(),
+        'fulfilmentObserved': result.fulfilmentObserved,
+      };
 }
 
 /// An idempotently releasable preference. Expiry can release only this request.

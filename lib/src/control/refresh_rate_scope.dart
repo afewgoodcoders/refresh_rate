@@ -209,7 +209,9 @@ class RefreshRateContentController {
     }
     final preference =
         RatePreference.content(sourceFps * playbackSpeed, strategy: strategy);
-    if (old?.preference == preference) return old!.ready;
+    if (old?.preference == preference) {
+      return RefreshRate.controller.reconcile(reason: 'playbackUnchanged');
+    }
     _lease = RefreshRate.request(preference, owner: 'content', priority: 250);
     old?.release();
     return RefreshRate.controller.reconcile(reason: 'playbackChanged');

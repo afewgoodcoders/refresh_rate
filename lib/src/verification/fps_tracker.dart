@@ -1,6 +1,8 @@
 import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui';
+import 'stutter_tracker.dart';
+import 'frame_clock.dart' if (dart.library.js_interop) 'frame_clock_web.dart';
 
 /// One Flutter engine timing record; this is not a presentation event.
 class FrameSample {
@@ -16,17 +18,23 @@ class FrameSample {
   /// Raw engine vsync timestamp in its own clock domain.
   final int vsyncUs;
 
-  /// Estimated vsync wall time, derived from rasterFinishWallTime.
+  /// Estimated vsync wall time using [timestampSource].
   final DateTime timestamp;
 
   /// Whether the wall-time bridge is available for event-time filtering.
   final bool hasEventTime;
+
+  /// Clock bridge used for event time, or unavailable for receipt-time fallback.
+  final String timestampSource;
 
   /// Explicit workload cadence; legacy zero means unknown.
   final double? targetHz;
 
   /// Immutable workload tags applicable at the frame event time.
   final Map<String, String> tags;
+
+  /// Optional engine raster-cache context, not process memory or GPU allocation.
+  final Map<String, int>? renderingContext;
 
   /// Creates a [FrameSample] with the supplied configuration.
   FrameSample(
@@ -36,35 +44,51 @@ class FrameSample {
       required this.vsyncUs,
       required this.timestamp,
       this.hasEventTime = true,
+      this.timestampSource = 'provided',
+      Map<String, int>? renderingContext,
       this.targetHz,
       Map<String, String> tags = const {}})
-      : tags = Map.unmodifiable(tags);
+      : tags = Map.unmodifiable(tags),
+        renderingContext = renderingContext == null
+            ? null
+            : Map.unmodifiable(renderingContext);
 
   /// Converts raw phases using the raster-finish wall-time bridge.
-  factory FrameSample.fromTiming(FrameTiming t) {
+  factory FrameSample.fromTiming(FrameTiming t,
+      {bool includeRenderingContext = false}) {
     final vsync = t.timestampInMicroseconds(FramePhase.vsyncStart);
     final finish = t.timestampInMicroseconds(FramePhase.rasterFinish);
     final wall = t.timestampInMicroseconds(FramePhase.rasterFinishWallTime);
+    final event = frameEventTime(vsync, finish, wall);
     return FrameSample(
         buildUs: t.buildDuration.inMicroseconds,
         rasterUs: t.rasterDuration.inMicroseconds,
         totalUs: t.totalSpan.inMicroseconds,
         vsyncUs: vsync,
-        hasEventTime: wall > 0 && finish >= vsync,
-        timestamp: wall > 0 && finish >= vsync
-            ? DateTime.fromMicrosecondsSinceEpoch(wall - (finish - vsync),
-                isUtc: true)
-            : DateTime.now().toUtc());
+        renderingContext: includeRenderingContext
+            ? {
+                'layerCacheCount': t.layerCacheCount,
+                'layerCacheBytes': t.layerCacheBytes,
+                'pictureCacheCount': t.pictureCacheCount,
+                'pictureCacheBytes': t.pictureCacheBytes,
+              }
+            : null,
+        hasEventTime: event != null,
+        timestampSource: event?.source ?? 'unavailable',
+        timestamp: event?.timestamp ?? DateTime.now().toUtc());
   }
 
   /// Serializes this value to a JSON-compatible map.
   Map<String, Object?> toMap() => {
         'vsyncUs': vsyncUs,
         'timestamp': timestamp.toIso8601String(),
+        'timestampSource': timestampSource,
+        'hasEventTime': hasEventTime,
         'buildMs': buildUs / 1000,
         'rasterMs': rasterUs / 1000,
         'pipelineLatencyMs': totalUs / 1000,
         'targetHz': targetHz,
+        'renderingContext': renderingContext,
         'tags': tags
       };
 }
@@ -170,6 +194,9 @@ class FpsTracker {
   /// Whole-session histogram of valid adjacent-frame intervals.
   final intervals = TimingHistogram();
   final _maxPhase = TimingHistogram();
+
+  /// Consecutive cadence anomalies at the declared workload target.
+  final stutters = StutterTracker();
   FrameSample? _previous;
   int? _lastVsync;
   int _count = 0;
@@ -218,7 +245,10 @@ class FpsTracker {
   }
 
   /// Prevents the next record from forming an interval across a boundary.
-  void breakSegment() => _previous = null;
+  void breakSegment() {
+    _previous = null;
+    stutters.interrupt();
+  }
 
   /// Adds one validated record and updates full-session aggregates.
   void addSample(FrameSample s) {
@@ -237,9 +267,15 @@ class FpsTracker {
       intervals.add(interval);
       if (target != null && target.isFinite && target > 0) {
         expectedIntervalCount++;
+        stutters.add(
+            intervalUs: interval,
+            targetHz: target,
+            start: previous.timestamp,
+            end: s.timestamp);
         if (interval > 1000000 / target * 1.5) cadenceGaps++;
       }
     }
+    if (previous != null && previous.targetHz != target) stutters.interrupt();
     _previous = s;
     _lastVsync = s.vsyncUs;
     _count++;
@@ -322,6 +358,7 @@ class FpsTracker {
   /// Clears recent history and all session aggregates.
   void reset() {
     _samples.clear();
+    stutters.clear();
     _worst.clear();
     _previous = null;
     _lastVsync = null;

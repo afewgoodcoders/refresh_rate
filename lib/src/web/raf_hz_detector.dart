@@ -25,17 +25,17 @@ class RafHzDetector {
   /// Measures raw browser callback cadence with visibility and timeout bounds.
   static Future<double?> measure(
       {Duration timeout = const Duration(seconds: 5)}) {
-    if (_pending != null) return _pending!;
     if (timeout <= Duration.zero || timeout > const Duration(seconds: 30)) {
       throw ArgumentError('Invalid timeout');
     }
-    if (web.document.hidden) return Future.value(null);
-    final completer = Completer<double?>();
-    _pending = completer.future;
+    if (_pending != null) return _pending!;
     sampleCount = 0;
     dispersionMs = null;
     measurementWindow = null;
     observedAt = null;
+    if (web.document.hidden) return Future.value(null);
+    final completer = Completer<double?>();
+    _pending = completer.future;
     final stamps = <double>[];
     var requestId = 0;
     Timer? timer;
@@ -51,6 +51,28 @@ class RafHzDetector {
       completer.complete(rate);
     }
 
+    void finishSamples() {
+      // Short observations still have useful callback evidence. Report the
+      // actual sample count/window instead of requiring 120 intervals.
+      if (stamps.length < 3) {
+        finish(null);
+        return;
+      }
+      final intervals = [
+        for (var i = 1; i < stamps.length; i++) stamps[i] - stamps[i - 1]
+      ]..sort();
+      final middle = intervals.length ~/ 2;
+      final median = intervals.length.isOdd
+          ? intervals[middle]
+          : (intervals[middle - 1] + intervals[middle]) / 2;
+      sampleCount = intervals.length;
+      dispersionMs = intervals[((intervals.length - 1) * .95).round()] -
+          intervals[((intervals.length - 1) * .05).round()];
+      measurementWindow =
+          Duration(microseconds: ((stamps.last - stamps.first) * 1000).round());
+      finish(1000 / median);
+    }
+
     visibility = ((web.Event _) {
       if (web.document.hidden) finish(null);
     }).toJS;
@@ -63,22 +85,14 @@ class RafHzDetector {
       }
       stamps.add(ts);
       if (stamps.length >= 121) {
-        final intervals = [
-          for (var i = 1; i < stamps.length; i++) stamps[i] - stamps[i - 1]
-        ]..sort();
-        final median = (intervals[59] + intervals[60]) / 2;
-        sampleCount = intervals.length;
-        dispersionMs = intervals[113] - intervals[5];
-        measurementWindow = Duration(
-            microseconds: ((stamps.last - stamps.first) * 1000).round());
-        finish(median > 0 ? 1000 / median : null);
+        finishSamples();
       } else {
         requestId = web.window.requestAnimationFrame(callback);
       }
     }).toJS;
     _cancel = () => finish(null);
     web.document.addEventListener('visibilitychange', visibility);
-    timer = Timer(timeout, () => finish(null));
+    timer = Timer(timeout, finishSamples);
     requestId = web.window.requestAnimationFrame(callback);
     return completer.future;
   }

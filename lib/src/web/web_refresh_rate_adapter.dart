@@ -6,8 +6,9 @@ import 'raf_hz_detector.dart';
 
 /// Web implementation of [RefreshRateApiAdapter].
 ///
-/// Uses `requestAnimationFrame` interval timing to detect the display's
-/// current refresh rate.  Control methods are graceful no-ops because
+/// Uses `requestAnimationFrame` intervals to measure browser callback cadence.
+/// This does not establish the physical display's refresh rate.
+/// Legacy control methods are graceful no-ops because
 /// browsers own their vsync scheduling and expose no API to change it.
 class WebRefreshRateApiAdapter
     implements RefreshRateApiAdapter, RefreshRateDiagnosticsAdapter {

@@ -19,6 +19,7 @@ abstract class SessionScorer {
     bool debugBuild = kDebugMode,
     List<Map<String, Object?>> segments = const [],
     List<Map<String, Object?>> markers = const [],
+    Map<String, Object?> milestones = const {},
   }) {
     final targetKnown = targetHz.isFinite && targetHz > 0;
     final count = tracker.budgetedFrameCount;
@@ -86,6 +87,8 @@ abstract class SessionScorer {
         exclusionReasons: exclusionReasons,
         deviceState: deviceState,
         frameCount: tracker.sampleCount,
+        stutters: tracker.stutters.toMap(),
+        milestones: milestones,
         expectedWorkloadFrameCount: expectedWorkloadFrameCount,
         intervalCount: tracker.intervals.count,
         budgetedFrameCount: count,
@@ -107,6 +110,7 @@ abstract class SessionScorer {
               '${entry.key}P$p': entry.value.percentileMs(p.toDouble()),
         }),
         worstFrames: tracker.worstFrames,
+        recentFrames: tracker.samples,
         segments: segments,
         markers: markers,
         pointOnePercentLowFps: tracker.pointOnePercentLowFps);

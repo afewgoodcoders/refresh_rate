@@ -128,6 +128,9 @@ class SessionReport {
   /// Total accepted records across the entire session.
   final int frameCount;
 
+  /// Cadence episodes and bounded milestone evidence.
+  final Map<String, Object?> stutters, milestones;
+
   /// Expected Flutter frames integrated over explicitly budgeted active segments.
   final double? expectedWorkloadFrameCount;
 
@@ -169,6 +172,9 @@ class SessionReport {
 
   /// Bounded worst pipeline-latency records retained across the full session.
   final List<FrameSample> worstFrames;
+
+  /// Bounded recent frame history for post-session inspection.
+  final List<FrameSample> recentFrames;
 
   /// Timestamped workload, lifecycle, tag and device-state segments.
   final List<Map<String, Object?>> segments;
@@ -212,6 +218,8 @@ class SessionReport {
     required this.exclusionReasons,
     required this.deviceState,
     this.frameCount = 0,
+    this.stutters = const {},
+    this.milestones = const {},
     this.expectedWorkloadFrameCount,
     this.intervalCount = 0,
     this.budgetedFrameCount = 0,
@@ -224,6 +232,7 @@ class SessionReport {
     this.findings = const [],
     this.percentilesMs = const {},
     this.worstFrames = const [],
+    this.recentFrames = const [],
     this.segments = const [],
     this.markers = const [],
     this.pointOnePercentLowFps,
@@ -233,9 +242,23 @@ class SessionReport {
   Map<String, dynamic> toMap() => {
         'schemaVersion': 2,
         'source': 'flutterFrameTiming',
+        'metricDefinitions': {
+          'flutterFrameCadenceFps':
+              'Valid adjacent interval count * 1000000 / interval microsecond sum; exclusions and target boundaries break adjacency.',
+          'lowFps':
+              'Reciprocal mean of the slowest interval tail. Minimum samples: 1%=100, 5%=20, 0.1%=1000. Partial histogram tails are approximate.',
+          'phaseOverrunPercent':
+              'Budgeted frames with build or raster phase over workload budget, divided by budgeted frame count * 100.',
+          'pipelineLatencyMs':
+              'Vsync start to raster finish; not physical presentation latency.',
+          'percentilesMs':
+              'Nearest-rank phase/interval quantiles from histograms with <=1% relative bucket width.',
+        },
         'presentationCoverage': 'unavailable',
         'histogramRelativeBucketWidth': 0.01,
         'frameCount': frameCount,
+        'stutters': stutters,
+        'milestones': milestones,
         'expectedWorkloadFrameCount': expectedWorkloadFrameCount,
         'workloadCoverage': workloadCoverage,
         'intervalCount': intervalCount,
@@ -252,6 +275,7 @@ class SessionReport {
         'percentilesMs': percentilesMs,
         'findings': findings,
         'worstFrames': worstFrames.map((f) => f.toMap()).toList(),
+        'recentFrames': recentFrames.map((f) => f.toMap()).toList(),
         'segments': segments,
         'markers': markers,
         'sessionName': sessionName,
@@ -277,6 +301,9 @@ class SessionReport {
 
   /// Serializes this report to a JSON string.
   String toJson() => jsonEncode(toMap());
+
+  /// One complete versioned report per line for streaming ingestion.
+  String toNdjson() => '${toJson()}\n';
 
   /// Serializes this report to a CSV string.
   String toCsv() {

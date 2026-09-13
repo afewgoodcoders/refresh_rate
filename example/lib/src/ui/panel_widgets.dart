@@ -20,7 +20,7 @@ class SurfacePanel extends StatelessWidget {
         color: const Color(0xFF1C1B1B),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: const Color(0xFF00F0FF).withValues(alpha: 0.08),
+          color: const Color(0xFF00F0FF).withAlpha((255 * (0.08)).round()),
         ),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -208,7 +208,7 @@ class SignalBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
+        color: color.withAlpha((255 * (0.14)).round()),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -299,7 +299,7 @@ class ActionButton extends StatelessWidget {
     final child = Text(spec.label);
     final background = spec.onTap == null
         ? const Color(0xFF171717)
-        : spec.accent.withValues(alpha: spec.outlined ? 0.08 : 0.18);
+        : spec.accent.withAlpha((255 * (spec.outlined ? 0.08 : 0.18)).round());
 
     if (spec.outlined) {
       return OutlinedButton(
@@ -308,7 +308,7 @@ class ActionButton extends StatelessWidget {
           side: BorderSide(
             color: spec.onTap == null
                 ? const Color(0xFF2A2A2A)
-                : spec.accent.withValues(alpha: 0.5),
+                : spec.accent.withAlpha((255 * (0.5)).round()),
           ),
           backgroundColor: background,
           foregroundColor: foreground,

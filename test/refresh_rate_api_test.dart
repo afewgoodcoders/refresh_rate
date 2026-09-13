@@ -72,6 +72,15 @@ void main() {
         throwsArgumentError);
     expect(fake.calls, isEmpty);
   });
+  test('repeated playback updates return the current backend result', () async {
+    final content = RefreshRateContentController();
+    addTearDown(content.dispose);
+    for (final fps in [24000 / 1001, 30000 / 1001, 30000 / 1001]) {
+      final result = await content.update(sourceFps: fps);
+      expect(result.status, RequestStatus.submitted);
+      expect(result.preference.fps, fps);
+    }
+  });
   test('late reads cannot overwrite a newer snapshot', () async {
     final first = Completer<DisplayInfoMessage>();
     final second = Completer<DisplayInfoMessage>();
@@ -79,8 +88,10 @@ void main() {
     final earlier = RefreshRate.refresh();
     fake.fetch = second;
     final later = RefreshRate.refresh();
-    second.complete(DisplayInfoMessage(currentRate: 120)); await later;
-    first.complete(DisplayInfoMessage(currentRate: 60)); await earlier;
+    second.complete(DisplayInfoMessage(currentRate: 120));
+    await later;
+    first.complete(DisplayInfoMessage(currentRate: 60));
+    await earlier;
     expect(RefreshRate.info.nativeReportedDisplayHz, 120);
   });
   test('cache resets and unavailable values remain unknown', () async {

@@ -1,8 +1,16 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'diagnostics/configuration_doctor.dart';
+import 'diagnostics/diagnostic_bundle.dart';
+import 'telemetry/export_policy.dart';
+import 'models/session_report.dart';
 import 'dart:ui' as ui;
 import 'models/rate_diagnostics.dart';
 import 'control/rate_controller.dart';
 import 'control/auto_controller.dart';
+import 'control/quality_controller.dart';
+import 'control/native_performance.dart';
 import 'package:flutter/widgets.dart';
 
 import 'generated/refresh_rate_api.g.dart';
@@ -163,6 +171,7 @@ class RefreshRate {
             info.displayModeMaxHz, 'nativeDisplayCapability', 'activeWindow'),
         capabilities: await capabilities(),
         displayId: native['displayId'] as String?,
+        nativeMetadata: Map.unmodifiable(native),
         suggestedNormalHz: (native['suggestedNormalHz'] as num?)?.toDouble(),
         suggestedHighHz: (native['suggestedHighHz'] as num?)?.toDouble());
   }
@@ -184,10 +193,70 @@ class RefreshRate {
         scope: 'pluginObserver',
         observedAt: DateTime.now().toUtc(),
         sampleCount: (data['sampleCount'] as num?)?.toInt(),
-        window: duration,
+        window: data['windowUs'] is num
+            ? Duration(microseconds: (data['windowUs'] as num).toInt())
+            : duration,
         unavailableReason: data['callbackHz'] == null
             ? 'Observer unsupported or no active callbacks'
             : null);
+  }
+
+  /// Checks setup and backend limits using current qualified observations.
+  static Future<ConfigurationReport> doctor({ui.FlutterView? view}) async {
+    try {
+      final data =
+          await diagnostics(view: view).timeout(const Duration(seconds: 10));
+      return ConfigurationReport.inspect(
+          info: info,
+          diagnostics: data,
+          platform: kIsWeb ? 'web' : defaultTargetPlatform.name);
+    } on MissingPluginException catch (error) {
+      return _configurationFailure(error.message ?? 'Plugin is not registered');
+    } on PlatformException catch (error) {
+      return _configurationFailure(error.message ?? error.code);
+    } on TimeoutException {
+      return _configurationFailure('Native display query timed out');
+    }
+  }
+
+  static ConfigurationReport _configurationFailure(String reason) {
+    final missing = RateObservation(
+        value: null,
+        source: 'unavailable',
+        scope: 'unknown',
+        observedAt: DateTime.now().toUtc(),
+        unavailableReason: reason);
+    return ConfigurationReport(
+        platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
+        diagnostics: RateDiagnostics(
+            requestedPreference: requestedPreference,
+            nativeReportedDisplayHz: missing,
+            engineReportedDisplayHz: missing,
+            nativeCallbackCadenceHz: missing,
+            displayModeMaxHz: missing,
+            capabilities: const RefreshRateCapabilities(query: false)),
+        findings: [
+          ConfigurationFinding('queryFailed', reason,
+              'Confirm plugin registration in this engine and query after binding/view attachment. Rebuild the app after native plugin changes.')
+        ]);
+  }
+
+  /// Creates an explicitly shared, bounded diagnostic snapshot. Does not upload.
+  static Future<DiagnosticBundle> diagnosticBundle(
+      {ui.FlutterView? view,
+      SessionReport? session,
+      Map<String, String> environment = const {},
+      String? reproduction,
+      TelemetryExportPolicy? policy}) async {
+    final decisions = decisionHistory;
+    final configuration = await doctor(view: view);
+    return DiagnosticBundle(
+        configuration: configuration,
+        session: session,
+        decisions: decisions,
+        environment: environment,
+        reproduction: reproduction,
+        policy: policy);
   }
 
   // ── Platform registration ──────────────────────────────────────
@@ -304,10 +373,55 @@ class RefreshRate {
 
   /// Creates an opt-in policy driven by explicit activity adapters.
   static RefreshRateAutoController auto(
-          {RefreshRatePolicy policy = RefreshRatePolicy.balanced,
-          Duration idleDelay = const Duration(milliseconds: 800)}) =>
-      RefreshRateAutoController(controller, onChanged,
-          policy: policy, idleDelay: idleDelay, initialInfo: info);
+      {RefreshRatePolicy policy = RefreshRatePolicy.balanced,
+      bool shadowMode = false,
+      Duration idleDelay = const Duration(milliseconds: 800)}) {
+    final result = RefreshRateAutoController(controller, onChanged,
+        policy: policy,
+        shadowMode: shadowMode,
+        idleDelay: idleDelay,
+        capabilities: const RefreshRateCapabilities(),
+        initialInfo: info);
+    capabilities().then(result.updateCapabilities).catchError((Object _) {
+      result.updateCapabilities(const RefreshRateCapabilities());
+    });
+    return result;
+  }
+
+  /// Creates an opt-in application quality adviser. Declare work with setWorkload.
+  static RefreshRateQualityController adviseQuality(
+          {required ValueChanged<QualityRecommendation> onRecommendation,
+          int badFrames = 8,
+          int recoveryFrames = 120}) =>
+      RefreshRateQualityController(
+          onRecommendation: onRecommendation,
+          changes: onChanged,
+          initialInfo: info,
+          badFrames: badFrames,
+          recoveryFrames: recoveryFrames);
+
+  /// Reads native thermal-envelope usage with an explicit forecast horizon.
+  static Future<ThermalHeadroomObservation> thermalHeadroom(
+          {int forecastSeconds = 10}) =>
+      NativePerformance.thermalHeadroom(forecastSeconds: forecastSeconds);
+
+  /// Creates foreground-only thermal polling with a minimum ten-second interval.
+  static ThermalHeadroomMonitor watchThermalHeadroom(
+          {int forecastSeconds = 10,
+          Duration interval = const Duration(seconds: 10)}) =>
+      ThermalHeadroomMonitor(
+          forecastSeconds: forecastSeconds, interval: interval);
+
+  /// Requests sustained workload consistency. Supply the application's known
+  /// baseline because Android has no public getter for prior sustained state.
+  static SustainedPerformanceLease sustainedPerformance(
+          {required bool previousEnabled, Duration? duration}) =>
+      NativePerformance.sustained(
+          previousEnabled: previousEnabled, duration: duration);
+
+  /// Restores the touch-boost state captured by this plugin on Android.
+  static Future<PerformanceRequestResult> resetTouchBoost() =>
+      NativePerformance.resetTouchBoost();
 
   // ── Verification overlays ──────────────────────────────────────
 
@@ -391,9 +505,11 @@ class RefreshRate {
   /// receive a [SessionReport] with verdict, FPS stats, and bottleneck hints.
   static RefreshRateSession startSession(String name,
           {double? expectedFps,
+          bool includeRenderingContext = false,
           Duration finalizationTimeout = const Duration(milliseconds: 1100)}) =>
       RefreshRateSession.create(name, _cachedInfo,
           expectedFps: expectedFps,
+          includeRenderingContext: includeRenderingContext,
           changes: onChanged,
           finalizationTimeout: finalizationTimeout);
 }

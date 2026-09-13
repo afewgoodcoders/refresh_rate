@@ -8,18 +8,19 @@ class FrameCollector {
 
   /// Shared service instance for this Flutter isolate.
   static final instance = FrameCollector._();
-  final _listeners = <void Function(List<FrameSample>)>{};
+  final _listeners = <void Function(List<FrameSample>), bool>{};
 
   /// Number of active subscribers owning the engine callback.
   int get subscriberCount => _listeners.length;
 
   /// Adds an independent subscriber and returns its idempotent disposer.
-  void Function() subscribe(void Function(List<FrameSample>) listener) {
+  void Function() subscribe(void Function(List<FrameSample>) listener,
+      {bool includeRenderingContext = false}) {
     if (_listeners.isEmpty) {
       SchedulerBinding.instance.addTimingsCallback(_collect);
     }
     void ownedListener(List<FrameSample> frames) => listener(frames);
-    _listeners.add(ownedListener);
+    _listeners[ownedListener] = includeRenderingContext;
     var released = false;
     return () {
       if (released) return;
@@ -34,9 +35,13 @@ class FrameCollector {
   void _collect(List<FrameTiming> timings) {
     final frames =
         List<FrameSample>.unmodifiable(timings.map(FrameSample.fromTiming));
-    for (final listener in List.of(_listeners)) {
+    final detailed = _listeners.values.any((value) => value)
+        ? List<FrameSample>.unmodifiable(timings.map(
+            (t) => FrameSample.fromTiming(t, includeRenderingContext: true)))
+        : frames;
+    for (final entry in List.of(_listeners.entries)) {
       try {
-        listener(frames);
+        entry.key(entry.value ? detailed : frames);
       } catch (error, stack) {
         FlutterError.reportError(FlutterErrorDetails(
             exception: error, stack: stack, library: 'refresh_rate collector'));

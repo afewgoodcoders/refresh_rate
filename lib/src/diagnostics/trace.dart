@@ -3,6 +3,8 @@ import 'dart:developer' as developer;
 import 'dart:convert';
 import '../refresh_rate.dart';
 import '../control/rate_controller.dart';
+import '../models/session_report.dart';
+import '../telemetry/export_policy.dart';
 
 /// Optional Dart timeline/DevTools service integration. No collector is enabled.
 class RefreshRateTrace {
@@ -11,6 +13,11 @@ class RefreshRateTrace {
     _subscription = RefreshRate.onDecision.listen(_decision);
     if (!_registered) {
       _registered = true;
+      developer.registerExtension(
+          'ext.refresh_rate.session',
+          (_, __) async => developer.ServiceExtensionResponse.result(
+              _sessionJson ??
+                  '{"available":false,"reason":"No completed session supplied"}'));
       developer.registerExtension('ext.refresh_rate.diagnostics',
           (_, __) async {
         final diagnostics = await RefreshRate.diagnostics();
@@ -36,6 +43,17 @@ class RefreshRateTrace {
     }
   }
   static bool _registered = false;
+  static String? _sessionJson;
+
+  /// Supplies a bounded, privacy-filtered completed report for DevTools clients.
+  /// Clear it with null when the application no longer needs the evidence.
+  static void setSessionReport(SessionReport? report,
+      {TelemetryExportPolicy? policy}) {
+    _sessionJson = report == null
+        ? null
+        : (policy ?? TelemetryExportPolicy()).encode(report.toMap());
+  }
+
   StreamSubscription<RefreshRateDecision>? _subscription;
   void _decision(RefreshRateDecision event) =>
       developer.Timeline.instantSync('refresh_rate.request', arguments: {
