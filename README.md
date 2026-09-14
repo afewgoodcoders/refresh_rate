@@ -251,6 +251,8 @@ RefreshRate.hideOverlay();
 
 The full overlay separates the requested preference (including numeric content FPS), OS-reported display Hz, explicit workload FPS and budget, Flutter cadence, and phase-budget overruns. For a 120 FPS workload the budget is 8.33 ms. Omitting `expectedFps` displays an unknown workload/budget; display capability is never substituted for application intent.
 
+The compact badges show `120 FPS` and `120 Hz`, with no framework prefix. FPS turns green at 95% of its reference, amber at 75%, and red below that. The reference is `expectedFps` when supplied, otherwise fresh OS-reported display Hz or the current Flutter view's reported refresh rate; this affects color only, not workload budgets or benchmark scoring. Unknown Hz displays `— Hz`, idle FPS displays `FPS idle`, and browser Hz keeps a `callback` qualifier. The HUD uses monospace columns and distinct colors for build, raster, budget, and device health, with over-budget phases highlighted in red.
+
 Updates are event-driven and throttled, including request decisions while the app is otherwise idle. Hz-only mode does not subscribe to Flutter timings. A graph shows recent pipeline latency and the declared workload budget. Single-record batches do not sustain repaint loops, so sparse activity can display idle/stale. Keep the overlay off when measuring the application itself; use the separate overhead experiment when measuring the observer.
 
 ## Configuration and diagnostic bundles

@@ -140,12 +140,15 @@ void main() {
     RefreshRate.showOverlay(expectedFps: 120);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Workload: 120.0 FPS · budget: 8.33 ms'), findsOneWidget);
+    expect(find.text('WORKLOAD'), findsOneWidget);
+    expect(find.text('120.0 FPS'), findsOneWidget);
+    expect(find.text('8.33 ms'), findsOneWidget);
     RefreshRate.matchContent(24000 / 1001);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
-    expect(find.text('Requested: content 23.976 FPS'), findsOneWidget);
+    expect(find.text('REQUEST'), findsOneWidget);
+    expect(find.text('content 23.976 FPS'), findsOneWidget);
     RefreshRate.hideOverlay();
     await tester.pump();
     expect(() => RefreshRate.showOverlay(expectedFps: 0), throwsArgumentError);
