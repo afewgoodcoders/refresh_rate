@@ -6,6 +6,7 @@
 - Restyled the performance HUD with aligned monospace stats, prominent FPS/Hz readouts, and a PC benchmark palette: cyan display/requests, orange build times, violet raster times, amber budgets, and red over-budget phases or thermal warnings.
 - Kept unavailable Hz, idle/stale FPS, browser callback sources, and unknown workload budgets explicit. Stale HUD readings and graphs no longer display old timings as current.
 - Synchronized the iOS and macOS podspec versions with the package release.
+- Updated integration checks and screenshots to use the production FPS, Hz, and HUD widgets, including illustrative frame samples for reproducible captures.
 
 ## 2.0.0
 

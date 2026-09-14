@@ -389,15 +389,19 @@ void main() {
     RefreshRate.showOverlay(expectedFps: 120);
     await waitFor(() => RefreshRate.isOverlayVisible);
     await RefreshRate.matchContent(24000 / 1001);
-    await waitFor(
-        () => find.text('Requested: content 23.976 FPS').evaluate().isNotEmpty);
-    expect(find.text('Workload: 120.0 FPS · budget: 8.33 ms'), findsOneWidget);
+    await waitFor(() => find.text('content 23.976 FPS').evaluate().isNotEmpty);
+    expect(find.text('REQUEST'), findsOneWidget);
+    expect(find.text('WORKLOAD'), findsOneWidget);
+    expect(find.text('120.0 FPS'), findsOneWidget);
+    expect(find.text('8.33 ms'), findsOneWidget);
     await RefreshRate.preferDefault();
-    await waitFor(() => find.text('Requested: system').evaluate().isNotEmpty);
+    await waitFor(() => find.text('system').evaluate().isNotEmpty);
     RefreshRate.hideOverlay();
     RefreshRate.showOverlay();
-    await waitFor(() =>
-        find.text('Workload: unknown · budget: unknown').evaluate().isNotEmpty);
+    await waitFor(() => find.text('unknown').evaluate().length >= 3);
+    expect(find.text('WORKLOAD'), findsOneWidget);
+    expect(find.text('BUDGET'), findsOneWidget);
+    expect(find.text('8.33 ms'), findsNothing);
     RefreshRate.hideOverlay();
     RefreshRate.showHz();
     await waitFor(() => RefreshRate.isOverlayVisible);

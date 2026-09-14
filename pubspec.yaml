@@ -16,10 +16,12 @@ topics:
   - ui
 
 screenshots:
-  - description: "Illustrative FPS overlay layout with frame budget diagnostics"
+  - description: "Compact FPS badge using illustrative frame samples"
     path: screenshots/fps.png
-  - description: "Illustrative refresh-rate badge layout"
+  - description: "Native display refresh-rate badge captured on Android"
     path: screenshots/hz.png
+  - description: "Performance HUD using illustrative frame samples"
+    path: screenshots/hud.png
 
 environment:
   sdk: ^3.5.0
