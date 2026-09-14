@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:refresh_rate/refresh_rate.dart';
+import 'package:refresh_rate/src/verification/fps_tracker.dart';
+import 'package:refresh_rate/src/verification/overlay_widgets.dart';
 
 import 'package:refresh_rate_example/main.dart';
 
@@ -13,7 +15,9 @@ Future<void> _waitFor(
 }) async {
   final deadline = DateTime.now().add(timeout);
   while (!finder.evaluate().isNotEmpty) {
-    if (DateTime.now().isAfter(deadline)) return;
+    if (DateTime.now().isAfter(deadline)) {
+      fail('Screenshot content did not appear: $finder');
+    }
     await tester.pump(const Duration(milliseconds: 100));
   }
   await tester.pump(const Duration(milliseconds: 200));
@@ -31,120 +35,78 @@ Future<void> _captureScreenshot(
   await binding.takeScreenshot(name);
 }
 
-// ── Mock overlay widgets ─────────────────────────────────────────────────────
-// The real FPS overlay shows "0 FPS" during integration tests because
-// pump() doesn't generate real frame timings. These mock widgets render
-// hardcoded values that represent a realistic 120Hz device scenario.
-
-/// Mock FPS badge — identical styling to FpsOverlayWidget (showFPS) with
-/// a hardcoded value showing a healthy 120 FPS readout.
-Widget _mockFpsOverlay() {
-  return Positioned(
-    top: 0,
-    right: 8,
-    child: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: IgnorePointer(
-          child: Material(
-            type: MaterialType.transparency,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xDD000000),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                '120 FPS',
-                style: TextStyle(
-                  color: Color(0xFF4CAF50), // green — hitting target
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+// Use deterministic frame samples for reproducible illustrative screenshots,
+// rendered by the production widgets. Hz still comes from the native device.
+FpsTracker _screenshotFrames() {
+  final tracker = FpsTracker();
+  for (var i = 0; i < 120; i++) {
+    tracker.addSample(FrameSample(
+        buildUs: 2500 + (i % 7) * 50,
+        rasterUs: 900 + (i % 5) * 40,
+        totalUs: 3700 + (i % 19 == 0 ? 2200 : 0),
+        vsyncUs: i * 8333,
+        timestamp: DateTime.utc(2026).add(Duration(microseconds: i * 8333)),
+        targetHz: 120));
+  }
+  return tracker;
 }
 
-/// Mock Hz badge — identical styling to HzOverlayWidget.
-Widget _mockHzOverlay() {
-  return Positioned(
-    top: 0,
-    right: 8,
-    child: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: IgnorePointer(
-          child: Material(
-            type: MaterialType.transparency,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xDD000000),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                '120Hz',
-                style: TextStyle(
-                  color: Color(0xFF64B5F6),
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-/// Wraps the example app with a mock overlay [widget] on top.
-Widget _appWithOverlay(Widget overlay) {
-  return Directionality(
-    textDirection: TextDirection.ltr,
-    child: Stack(
-      children: [
-        const RefreshRateExampleApp(),
-        overlay,
-      ],
-    ),
-  );
-}
+/// Wraps the example app with a production overlay on top.
+Widget _appWithOverlay(Widget overlay) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: const RefreshRateExampleApp(),
+    builder: (_, child) => Stack(children: [child!, overlay]));
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  // ── 1. overlay — FPS counter showing 120 FPS in green ────────────────────
+  tearDown(() async {
+    RefreshRate.hideOverlay();
+    await RefreshRate.preferDefault();
+  });
   testWidgets('screenshot: fps', (tester) async {
-    await tester.pumpWidget(_appWithOverlay(_mockFpsOverlay()));
+    await tester.pumpWidget(_appWithOverlay(
+        FpsOverlayWidget(tracker: _screenshotFrames(), expectedFps: 120)));
     await tester.pump(const Duration(seconds: 1));
 
     await _waitFor(tester, find.text('Diagnostic Console'));
 
-    // Enable high refresh so the hero panel shows real 120 Hz data.
-    RefreshRate.enable();
+    // Refresh native metadata without claiming that the request is fulfilled.
+    await RefreshRate.enable();
+    await RefreshRate.refresh();
+    expect(find.text('120 FPS'), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
 
     await _captureScreenshot(binding, tester, 'fps');
   });
 
-  // ── 2. before_after — Hz badge showing 120Hz ────────────────────────────
   testWidgets('screenshot: hz', (tester) async {
-    await tester.pumpWidget(_appWithOverlay(_mockHzOverlay()));
+    await tester.pumpWidget(
+        _appWithOverlay(HzOverlayWidget(tracker: _screenshotFrames())));
     await tester.pump(const Duration(seconds: 1));
 
     await _waitFor(tester, find.text('Diagnostic Console'));
 
-    RefreshRate.enable();
+    await RefreshRate.enable();
+    await RefreshRate.refresh();
     await tester.pump(const Duration(seconds: 2));
 
+    // Rebuild the badge with the refreshed native metadata.
+    await tester.pumpWidget(
+        _appWithOverlay(HzOverlayWidget(tracker: _screenshotFrames())));
     await _captureScreenshot(binding, tester, 'hz');
+  });
+
+  testWidgets('screenshot: hud', (tester) async {
+    await RefreshRate.refresh();
+    await tester.pumpWidget(_appWithOverlay(
+        FullOverlayWidget(tracker: _screenshotFrames(), expectedFps: 120)));
+    await _waitFor(tester, find.text('Diagnostic Console'));
+    expect(find.text('PHASE OVERRUNS'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(FullOverlayWidget), matching: find.text('8.33 ms')),
+        findsOneWidget);
+    await _captureScreenshot(binding, tester, 'hud');
   });
 }

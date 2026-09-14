@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.1
+
+- Restored compact, bold FPS/Hz badges without the Flutter/OS prefixes. FPS uses green, amber, and red indicators relative to the explicit workload target, or reported display timing when no target is supplied. This color reference does not set a workload budget.
+- Restyled the performance HUD with aligned monospace stats, prominent FPS/Hz readouts, and a PC benchmark palette: cyan display/requests, orange build times, violet raster times, amber budgets, and red over-budget phases or thermal warnings.
+- Kept unavailable Hz, idle/stale FPS, browser callback sources, and unknown workload budgets explicit. Stale HUD readings and graphs no longer display old timings as current.
+- Synchronized the iOS and macOS podspec versions with the package release.
+- Updated integration checks and screenshots to use the production FPS, Hz, and HUD widgets, including illustrative frame samples for reproducible captures.
+
 ## 2.0.0
 
 - Corrected FPS lows to use frame intervals and kept benchmark aggregates for the full session. Added separate phase overruns, pipeline latency, cadence gaps, stutter episodes and recovery evidence.

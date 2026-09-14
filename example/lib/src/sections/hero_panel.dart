@@ -34,7 +34,7 @@ class HeroPanel extends StatelessWidget {
             children: [
               const Expanded(
                 child: PanelHeader(
-                  eyebrow: 'refresh_rate v1.0',
+                  eyebrow: 'refresh_rate',
                   title: 'Diagnostic Console',
                   subtitle:
                       'Live instrumentation for display state, frame budget, control requests, and benchmark sessions.',

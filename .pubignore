@@ -4,3 +4,13 @@ build/
 temp_plugin/
 analyze_output.txt
 scripts/
+
+# Local assistant, editor, and operating-system files
+.claude/
+.idea/
+.vscode/
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*.log

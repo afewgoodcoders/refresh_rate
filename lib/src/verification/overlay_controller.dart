@@ -75,8 +75,10 @@ class OverlayController {
       }
       _entry = OverlayEntry(
           builder: (_) => switch (_mode) {
-                _OverlayMode.fps =>
-                  FpsOverlayWidget(tracker: _tracker, stale: _isStale),
+                _OverlayMode.fps => FpsOverlayWidget(
+                    tracker: _tracker,
+                    stale: _isStale,
+                    expectedFps: _expectedFps),
                 _OverlayMode.hz => HzOverlayWidget(tracker: _tracker),
                 _OverlayMode.full => FullOverlayWidget(
                     tracker: _tracker,
